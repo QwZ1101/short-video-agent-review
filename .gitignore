@@ -1,0 +1,26 @@
+__pycache__/
+*.pyc
+.venv/
+.env
+.env.*
+reports/
+# 本地样本证据和下载包不默认提交到代码仓库。
+data/samples/evidence/
+analysis/
+.grill/
+.codex/
+.agents/
+.idea/
+.vscode/
+node_modules/
+*.log
+*.pem
+*.key
+*.mp4
+*.mov
+*.zip
+# 个人任务、截图、标注和效果记录只保存在本机。
+data/*
+!data/examples/
+Thumbs.db
+.DS_Store

@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>运行日志 · 复盘工作台</title><link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/logs.css"><script defer src="/logs.js"></script></head>
+<body><main class="log-main">
+<header><a href="/">← 返回复盘工作台</a><span class="local">本机只读 · 不调用模型</span></header>
+<section class="intro"><div><div class="eyebrow">WORKFLOW LOGS</div><h1>每次运行，都有迹可循。</h1><p>查看失败原因、阶段耗时和请求记录，保留每轮真实结果。</p></div><button id="refresh" class="primary">刷新日志</button></section>
+<div id="log-message" role="status" aria-live="polite"></div>
+<section class="log-metrics" id="metrics" aria-label="流程概况"></section>
+<div class="log-layout"><aside class="log-card"><label for="status-filter">筛选状态</label><select id="status-filter"><option value="all">全部流程</option><option value="failed">失败</option><option value="running">运行中</option><option value="awaiting_human_review">等待复核</option><option value="human_reviewed">复核已提交</option></select><nav id="log-runs" aria-label="流程列表"></nav><p id="list-scope" class="helper"></p></aside>
+<section class="log-card"><div id="log-detail"><p>正在读取流程…</p></div></section></div>
+<section class="log-card request-section"><h2>工作台请求</h2><p class="helper">最近 50 条当前日志中的请求。仅记录时间、请求编号、接口、状态码和耗时，不记录查询参数、正文或凭据。每份日志最多 1 MiB，保留 3 份轮转备份。</p><div class="table-scroll" id="requests"></div></section>
+<p class="helper">历史流程按当时目标展示；阶段尝试次数不等于服务端计费次数。未结束的阶段不显示最终耗时。事件仅展示末尾至多 64 KiB、100 条；损坏的行会计数提示。原始工作流档案保留在 reports/workflows/。</p>
+</main></body></html>

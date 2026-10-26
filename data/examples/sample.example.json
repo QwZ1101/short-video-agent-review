@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "sample_id": "demo-001",
+  "scenario": "粒子特效与制作过程讲解",
+  "video": {"path": "data/local/video.mp4", "duration_seconds": null},
+  "tutorial_goal": "观众看完后索要展示网页链接，或者点赞，任一即可。",
+  "audience": "对粒子效果和制作过程感兴趣的观众",
+  "audience_prior_knowledge": "不要求编程、下载或解压能力",
+  "video_processing": {"frame_interval_seconds": 3, "max_frame_width": 960, "include_subtitle_midpoints": true},
+  "transcript_path": null,
+  "supporting_materials": [],
+  "source_delivery": null,
+  "platform_metrics": null,
+  "goal_revision": 1,
+  "success_criteria": {"logic": "any", "actions": ["索要展示网页链接", "点赞"]},
+  "out_of_scope": ["下载源码", "解压安装", "本地运行"],
+  "review_question": "展示和讲解是否清楚、是否有吸引力、是否有符合目标的行动引导？区分观察与待验证假设。"
+}
