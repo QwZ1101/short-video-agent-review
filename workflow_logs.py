@@ -108,7 +108,7 @@ class WorkflowLogs:
                      "status": redact(s.get("status"), 60), "error": redact(s.get("error") or s.get("reason")),
                      "duration_seconds": elapsed(s.get("started_at"), s.get("finished_at"))}
                     for s in state.get("stages", [])[:30] if isinstance(s, dict)],
-            events=[{k: redact(row.get(k)) for k in ("time", "event", "stage", "error")} for row in rows],
+            events=[{k: redact(row.get(k)) for k in ("time", "event", "stage", "error", "reason")} for row in rows],
             invalid_event_lines=invalid, events_truncated=truncated)
         plan = state.get("plan")
         if isinstance(plan, dict) and isinstance(plan.get("tasks"), list):
@@ -116,6 +116,13 @@ class WorkflowLogs:
                 "goal": redact(plan.get("goal")),
                 "tasks": [{k: redact(task.get(k)) for k in ("name", "role", "tool", "action", "reason")}
                           for task in plan["tasks"][:30] if isinstance(task, dict)]}
+        control = state.get("refinement")
+        if isinstance(control, dict):
+            result["refinement"] = {k: redact(control.get(k)) for k in ("status", "max_rounds", "rounds_started", "stop_reason")}
+            result["refinement"]["tasks"] = [{k: redact(t.get(k)) for k in ("target", "status", "reason")}
+                for t in (control.get("tasks") or [])[:10] if isinstance(t, dict)]
+            parent_attempts = state.get("parent_model_stage_attempts", 0)
+            result["refinement"]["parent_model_stage_attempts"] = parent_attempts if type(parent_attempts) is int else None
         return result
 
 

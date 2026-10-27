@@ -12,6 +12,7 @@
 - 目标变更提示，保留旧目标历史结果。
 - 运行日志页：成功/失败流程、阶段耗时、事件与脱敏请求记录。
 - 材料驱动的规则任务计划、平台数据计算或跳过分支，详见 [计划与数据说明](docs/plans-and-metrics.md)。
+- 可选的有界语义返修与再次验证，缺证即停止，详见 [返修说明](docs/refinement.md)。
 
 剩余开发与参赛演示验收见 [项目进度](docs/project-status.md)。
 
@@ -34,7 +35,7 @@ python run_workflow.py --mode live --sample data/samples/tutorial-001.json --max
 
 程序从环境变量读取密钥，不自动加载 `.env`。模型需要兼容本项目的图片输入与 JSON 输出格式；本机原案例使用 qwen3.8-flash，请按账号实际可用模型配置。完整运行会向配置的服务发送所选图片、字幕和配套内容。请只使用有权处理的材料。
 
-`live` 最多尝试两个模型阶段；`replay` 复用已有结果而不调用 API；`verify` 复用分析再验证。没有历史数据的新克隆不能直接回放。恢复流程有独立前提与次数限制，详见 `resume_workflow.py --help`。
+`live` 默认最多尝试两个模型阶段；显式启用返修时，总预算最多六次、返修最多两轮。`replay` 复用已有结果而不调用 API；`verify` 复用分析再验证。没有历史数据的新克隆不能直接回放。格式恢复与语义返修是不同入口，详见 `resume_workflow.py --help` 和 [返修说明](docs/refinement.md)。
 
 服务只监听 `127.0.0.1`，启动器自动选端口并复用同项目的健康服务。使用启动器实际输出的地址；不要用静态服务器替代 Python API。关闭浏览器后服务仍运行。个人样本未随仓库分发，新克隆先登记样本并运行流程，复核页才会有可选任务。
 
@@ -67,6 +68,7 @@ Node 只用于可选的前端语法检查，工作台运行本身不依赖 Node�
 | review_server.py / launch_review.py | 本机 API 与持久启动器 |
 | workflow_logs.py | 限量日志读取、脱敏、请求轮转日志 |
 | workflow_plan.py / platform_metrics.py | 任务计划、数据条件分支与可复算指标 |
+| refinement.py / revise_review.py / refine_workflow.py | 返修调度、单次修正及已有流程的有界继续 |
 | review-ui/dist/ | 无构建依赖的本机页面 |
 
-源码包静态审计、自动剪辑、平台数据自动采集、自主规划、自动语义返修等不属于当前已完成能力。
+源码包静态审计、自动剪辑、平台数据自动采集、自主规划与自动补证不属于当前已完成能力。

@@ -64,6 +64,19 @@ class LogTests(unittest.TestCase):
         self.assertNotIn("secret-example", json.dumps(plan))
         self.assertNotIn("never-expose", json.dumps(plan))
 
+    def test_refinement_feedback_is_visible_and_redacted(self):
+        self.state["refinement"] = {"status": "awaiting_evidence", "max_rounds": 1, "rounds_started": 0,
+            "stop_reason": "等待补证", "tasks": [{"target": "finding-1", "status": "insufficient_evidence",
+            "reason": "token=secret-example", "raw_payload": "private-material"}]}
+        self.state["parent_model_stage_attempts"] = {"private": "must-not-leak"}
+        (self.run / "workflow.json").write_text(json.dumps(self.state), encoding="utf-8")
+        control = WorkflowLogs(self.root).detail("run-test")["refinement"]
+        self.assertEqual(control["rounds_started"], "0")
+        self.assertEqual(control["tasks"][0]["status"], "insufficient_evidence")
+        self.assertNotIn("secret-example", json.dumps(control))
+        self.assertNotIn("private-material", json.dumps(control))
+        self.assertIsNone(control["parent_model_stage_attempts"])
+
     def test_request_log_rotates(self):
         log = RequestLog(self.root)
         try:

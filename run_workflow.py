@@ -1,4 +1,4 @@
-"""规则编排与数据条件分支，最多两个模型阶段，保留人工复核入口。
+"""规则编排与数据条件分支，明确总调用预算，保留人工复核入口。
 
 live 重新检查材料和取帧，再分析、验证；replay 只回放保存的真实结果。
 这不是模型自主规划器，不自动重试、不自动接受候选稿。
@@ -133,7 +133,9 @@ def run_replay(root, state, source):
     return paths
 
 
-def run_live(root, state, sample_path, model):
+def run_live(root, state, sample_path, model, max_repair_rounds=0):
+    if type(max_repair_rounds) is not int or not 0 <= max_repair_rounds <= 2:
+        raise ValueError("返修最多允许 0 到 2 轮")
     sample = load_sample(sample_path)
     state["sample_id"] = sample["sample_id"]
     state["platform_metrics_provided"] = sample.get("platform_metrics") is not None
@@ -142,6 +144,8 @@ def run_live(root, state, sample_path, model):
     write_json(snapshot, sample)
     paths = {}
     plan = build_plan(sample, state["model_stage_budget"])
+    plan["max_repair_rounds"] = max_repair_rounds
+    plan["repair_policy"] = "遇到证据不足停止；每轮修正和再次验证需要两个剩余调用预算"
     state["plan"] = plan
     write_json(root / "plan.json", plan)
     state["stages"] = [{"id": task["id"], "name": task["name"], "status": "pending"} for task in plan["tasks"]]
@@ -192,6 +196,9 @@ def run_live(root, state, sample_path, model):
         paths["verification_dir"] = read_json(destination / "latest.json")["run_dir"]
         return {"verification_dir": paths["verification_dir"]}
     execute_stage(root, state, "verification", verification, model_stage=True)
+    if max_repair_rounds:
+        from refinement import run_refinement_loop
+        run_refinement_loop(root, state, paths, model, max_repair_rounds)
     return paths
 
 
@@ -225,6 +232,8 @@ def create_handoff(root, state, paths):
     original, bundle, result, metadata = check_saved_verification(directory)
     state.update(status="awaiting_human_review", verification_decision=metadata["decision"], artifacts=paths,
                  stop_reason="模型输出可能有误；本版所有候选稿都进入人工复核，不自动接受或返修。", finished_at=now())
+    if state.get("refinement"):
+        state["stop_reason"] = state["refinement"]["stop_reason"]
     candidate = directory / "revised-review.json"
     state["human_review"] = {"status": "pending", "form": str(root / "human-review.json")}
     form = {"sample_id": original["sample_id"], "workflow_dir": str(root), "candidate_path": str(candidate),
@@ -240,15 +249,23 @@ def create_handoff(root, state, paths):
     (root / "original-review.md").write_text(render_report(original, bundle, {"model": model}), encoding="utf-8")
     mode_label = {"replay": "历史真实结果回放（本轮未调用模型）", "live": "本轮重新执行材料检查、取帧、分析和验证",
                   "resume": "只恢复失败的验证阶段，前置步骤复用原流程结果",
+                  "refine": "复用已完成的分析和验证，按反馈执行有上限的语义返修或停止等待补证",
                   "verify": "复用已有分析与原始证据，真实执行一次新的验证"}[state["mode"]]
     lines = ["# 复盘流程总览", "", "**当前状态：等待人工复核。候选稿尚未接受。**", "",
              "运行方式：" + mode_label, "", "样本：" + state["sample_id"], "",
              "模型阶段尝试次数：%s / %s（阶段启动数，不等于服务端计费用量）。" % (state["model_stage_attempts"], state["model_stage_budget"]), "",
              "| 步骤 | 执行状态 |", "| --- | --- |"]
     lines.extend("| %s | %s |" % (stage["name"], "复用原流程成功结果" if stage.get("execution") == "reused_from_parent_no_rerun" else stage["status"]) for stage in state["stages"])
-    if state.get("parent_workflow"):
+    if state.get("parent_workflow") and state["mode"] == "resume":
         lines.extend(["", "原流程已尝试 %s 个模型阶段，本次恢复单独限定 1 次。原失败记录保留：[%s](<%s>)。" % (
             state["parent_model_stage_attempts"], "原流程报告", (Path(state["parent_workflow"]) / "workflow.md").as_posix())])
+    if state.get("refinement"):
+        control = state["refinement"]
+        lines.extend(["", "## 受控返修", "", control["stop_reason"], "",
+            "已开始返修轮数：%s / %s。各轮输入、反馈和输出均保留，详情见 workflow.json 的 refinement。" % (control["rounds_started"], control["max_rounds"])])
+        if state.get("parent_workflow"):
+            lines.extend(["", "来源流程已尝试 %s 次，本轮追加尝试 %s 次，总计 %s 次阶段尝试。" % (
+                state["parent_model_stage_attempts"], state["model_stage_attempts"], state["parent_model_stage_attempts"] + state["model_stage_attempts"])])
     data_note = "已有本地计算工具汇总，位置见 workflow.json 的 data_analysis.report；数据本身为用户录入。" if state.get("data_analysis", {}).get("status") == "completed" else "未提供，跳过数据比较。" if not state["platform_metrics_provided"] else "已有数据输入，但本轮未执行数据计算。"
     lines.extend(["", "后台数据：" + data_note, "",
                   "验证角色判定：`" + metadata["decision"] + "`。即使模型均判定支持，本版也保留人工复核。", "",
@@ -258,7 +275,7 @@ def create_handoff(root, state, paths):
                   "- [人工反馈表](<%s>)" % (root / "human-review.json").as_posix(),
                   "- [运行状态与停止理由](<%s>)" % (root / "workflow.json").as_posix(), "",
                   "## 复核入口", "", "双击项目目录的启动复核工作台.cmd。先读验证报告，再检查候选稿是否真的修正了问题。人工反馈默认全部 pending；在页面中保存草稿或提交，实际反馈另存 human-feedback.json。", "",
-                  "当前为规则编排的两模型角色工作流；仅新 live 流程生成 plan.json 并执行数据条件分支，其它模式保留原始证据。没有模型自主规划、语义自动返修循环或发布操作。", ""])
+                  "当前为规则编排；新 live 流程生成 plan.json 并执行数据条件分支，可显式启用有预算上限的修正与再次验证。证据不足时停止，所有候选结果保留人工复核；没有模型自主规划或发布操作。", ""])
     (root / "workflow.md").write_text("\n".join(lines), encoding="utf-8")
     save_state(root, state, "human_review_required", decision=metadata["decision"])
 
@@ -286,11 +303,15 @@ def main():
     parser.add_argument("--review-dir", help="verify 模式必填：复用的成功分析目录")
     parser.add_argument("--sample", default="data/samples/tutorial-001.json")
     parser.add_argument("--verification-dir", help="回放的验证结果目录；默认最近一次独立验证结果")
-    parser.add_argument("--max-model-calls", type=int, choices=(0, 1, 2), default=2)
+    parser.add_argument("--max-model-calls", type=int, choices=range(7), default=2)
+    parser.add_argument("--max-repair-rounds", type=int, choices=(0, 1, 2), default=0,
+                        help="仅 live：最多返修轮数，每轮修正+再次验证消耗两个总预算名额；默认不启用")
     parser.add_argument("--model", default=os.environ.get("DASHSCOPE_MODEL") or "qwen3.8-flash")
     args = parser.parse_args()
     if args.mode == "verify" and not args.review_dir:
         parser.error("verify 模式需要 --review-dir")
+    if args.max_repair_rounds and args.mode != "live":
+        parser.error("只有 live 支持 --max-repair-rounds；已有结果使用 refine_workflow.py")
     root = PROJECT_ROOT / "reports/workflows" / ("run-" + datetime.now().strftime("%Y%m%d-%H%M%S-%f"))
     root.mkdir(parents=True)
     budget = 0 if args.mode == "replay" else min(args.max_model_calls, 1) if args.mode == "verify" else args.max_model_calls
@@ -298,7 +319,7 @@ def main():
     save_state(root, state, "workflow_started", mode=args.mode)
     try:
         if args.mode == "live":
-            paths = run_live(root, state, resolve_path(args.sample, PROJECT_ROOT), args.model)
+            paths = run_live(root, state, resolve_path(args.sample, PROJECT_ROOT), args.model, args.max_repair_rounds)
         elif args.mode == "verify":
             paths = run_verify_only(root, state, resolve_path(args.review_dir, PROJECT_ROOT).resolve(), args.model)
         else:

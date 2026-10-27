@@ -169,6 +169,7 @@ class ReviewStore:
                     current_goal = read_json(sample_path).get("tutorial_goal")
             return {"id": identifier, "sample_id": state["sample_id"], "status": state["status"],
                     "mode": state["mode"], "task": bundle["task"], "coverage": bundle["coverage"],
+                    "refinement": {k: state.get("refinement", {}).get(k) for k in ("status", "stop_reason")},
                     "current_goal": current_goal,
                     "goal_changed": bool(current_goal and current_goal != bundle["task"].get("tutorial_goal")),
                     "catalog": catalog, "original": original, "verification": verification,

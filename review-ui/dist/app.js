@@ -106,9 +106,10 @@ async function loadRun(identifier,selectedIndex=0){
   $('loading').hidden=false;$('workspace').hidden=true;message('');
   try{
     data=await api('/api/review?run='+encodeURIComponent(identifier));feedback=structuredClone(data.feedback);selected=Math.min(selectedIndex,feedback.findings.length);dirty=false;
-    $('runs').value=data.id;$('sample').textContent=data.sample_id+' / '+({verify:'复用分析 · 新验证',live:'完整运行',replay:'历史结果回放',resume:'恢复验证'}[data.mode]||data.mode);
+    $('runs').value=data.id;$('sample').textContent=data.sample_id+' / '+({verify:'复用分析 · 新验证',live:'完整运行',replay:'历史结果回放',resume:'恢复验证',refine:'受控返修'}[data.mode]||data.mode);
     $('goal').textContent=data.goal_changed?data.current_goal:data.task.tutorial_goal;$('audience').textContent=data.goal_changed?'下方为旧目标历史报告：'+data.task.tutorial_goal:'目标观众：'+(data.task.audience_prior_knowledge||data.task.audience||'未提供');
     $('status').textContent=feedback.status==='needs_evidence'?'等待补充证据':statuses[data.status]||data.status;
+    if(data.refinement?.status==='awaiting_evidence'&&!locked())$('status').textContent='等待补证 / 人工复核';
     $('coverage').textContent=`${data.coverage.image_count} 张图片 · ${data.coverage.subtitle_count} 段字幕`;
     const runtime=feedback.supplemental_evidence?.some(x=>x.snapshot?.runtime_result?.status==='passed_user_reported');
     $('boundary').textContent=data.goal_changed?'目标已调整。下方报告和修改任务仅作历史记录，下载源码和本地运行不再是当前待办；新目标尚需重新复盘。':'模型依据抽帧、字幕和配套材料分析。'+(runtime?'已记录创作者反馈：源码在本机正常运行。':'')+'是否达到本轮目标，需要相应的实际记录验证。';
@@ -122,6 +123,7 @@ async function loadRun(identifier,selectedIndex=0){
     await window.TaskBoard.load(data.id,locked());
     if(locked())message(feedback.provenance?.actor==='assistant_on_user_request'?'本轮由助手按你的授权整理并提交，历史记录已保留。接下来可以记录修改进度与实际验证结果。':'本轮复核已提交，可以继续跟踪修改与验证。');
     if(feedback.status==='needs_evidence')message('已记录不确定项，流程仍等待补证。补齐材料后可继续修改并提交。');
+    if(data.refinement?.stop_reason&&!locked())message('返修已停止：'+data.refinement.stop_reason);
     if(data.goal_changed)message('当前目标：索要展示网页链接，或者点赞。下面保留旧目标的结果，不代表新目标复盘已完成。');
   }catch(error){message(error.message);}finally{$('loading').hidden=true;}
 }
