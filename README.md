@@ -11,6 +11,9 @@
 - 本机复核页面、草稿及版本历史、修改任务与人工验证记录。
 - 目标变更提示，保留旧目标历史结果。
 - 运行日志页：成功/失败流程、阶段耗时、事件与脱敏请求记录。
+- 材料驱动的规则任务计划、平台数据计算或跳过分支，详见 [计划与数据说明](docs/plans-and-metrics.md)。
+
+剩余开发与参赛演示验收见 [项目进度](docs/project-status.md)。
 
 ## 本机运行
 
@@ -63,6 +66,7 @@ Node 只用于可选的前端语法检查，工作台运行本身不依赖 Node�
 | human_review.py / improvement_tasks.py | 人工复核、修改和验证记录 |
 | review_server.py / launch_review.py | 本机 API 与持久启动器 |
 | workflow_logs.py | 限量日志读取、脱敏、请求轮转日志 |
+| workflow_plan.py / platform_metrics.py | 任务计划、数据条件分支与可复算指标 |
 | review-ui/dist/ | 无构建依赖的本机页面 |
 
 源码包静态审计、自动剪辑、平台数据自动采集、自主规划、自动语义返修等不属于当前已完成能力。

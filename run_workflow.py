@@ -1,4 +1,4 @@
-"""第五步：固定顺序编排，最多两个模型阶段，保留人工复核入口。
+"""规则编排与数据条件分支，最多两个模型阶段，保留人工复核入口。
 
 live 重新检查材料和取帧，再分析、验证；replay 只回放保存的真实结果。
 这不是模型自主规划器，不自动重试、不自动接受候选稿。
@@ -16,6 +16,9 @@ import sys
 from check_materials import PROJECT_ROOT, load_sample, resolve_path
 from review_tutorial import render_report, validate_review, write_json
 from verify_tutorial import load_review_run, render_verification, validate_verification
+from workflow_plan import build_plan
+from platform_metrics import calculate_metrics
+from local_storage import atomic_json
 
 
 def read_json(path):
@@ -33,15 +36,13 @@ def new_state(mode, budget, sample_id):
     return {"schema_version": 1, "mode": mode, "sample_id": sample_id, "status": "running", "started_at": now(),
             "model_stage_budget": budget, "model_stage_attempts": 0,
             "stages": [{"id": key, "name": name, "status": "pending"} for key, name in names],
-            "data_analysis": {"status": "skipped", "reason": "本版尚未实现数据分析角色；有无后台数据另行记录"},
+            "data_analysis": {"status": "skipped", "reason": "本轮尚未执行数据计算；回放仅保留历史证据"},
             "human_review": {"status": "pending"}}
 
 
 def save_state(root, state, event, **details):
     # 同一任务不并行写状态；先写临时文件再替换，避免半份 JSON。
-    temporary = root / "workflow.json.tmp"
-    write_json(temporary, state)
-    temporary.replace(root / "workflow.json")
+    atomic_json(root / "workflow.json", state)
     with (root / "events.jsonl").open("a", encoding="utf-8") as output:
         output.write(json.dumps(dict(time=now(), event=event, **details), ensure_ascii=False) + "\n")
 
@@ -49,7 +50,10 @@ def save_state(root, state, event, **details):
 def execute_stage(root, state, identifier, action, model_stage=False):
     index = next(i for i, step in enumerate(state["stages"]) if step["id"] == identifier)
     step = state["stages"][index]
-    if step["status"] != "pending" or any(item["status"] != "completed" for item in state["stages"][:index]):
+    if state["status"] != "running" or step["status"] != "pending" or any(
+            item["status"] != "completed" and not (item["id"] == "metrics" and
+            item["status"] == "skipped" and item.get("execution") == "conditional_no_data")
+            for item in state["stages"][:index]):
         raise ValueError("阶段依赖未完成或阶段已经执行：" + identifier)
     step.update(status="running", started_at=now())
     save_state(root, state, "stage_started", stage=identifier)
@@ -137,6 +141,13 @@ def run_live(root, state, sample_path, model):
     snapshot = root / "sample.json"
     write_json(snapshot, sample)
     paths = {}
+    plan = build_plan(sample, state["model_stage_budget"])
+    state["plan"] = plan
+    write_json(root / "plan.json", plan)
+    state["stages"] = [{"id": task["id"], "name": task["name"], "status": "pending"} for task in plan["tasks"]]
+    save_state(root, state, "plan_created", planner=plan["planner"], ready=plan["ready"])
+    if not plan["ready"]:
+        raise ValueError(plan["blocked_reason"])
 
     def materials():
         destination = root / "materials"
@@ -150,6 +161,22 @@ def run_live(root, state, sample_path, model):
         paths["video_evidence"] = read_json(destination / "latest.json")["data_path"]
         return {"video_evidence": paths["video_evidence"]}
     execute_stage(root, state, "video", video)
+
+    def metrics():
+        result = calculate_metrics(sample.get("platform_metrics"))
+        destination = root / "metrics.json"
+        write_json(destination, result)
+        paths["metrics_result"] = str(destination)
+        state["data_analysis"] = {"status": result["status"], "reason": result.get("reason", "已计算；仅使用用户录入数据"),
+                                  "report": str(destination), "execution": "deterministic_no_model_call"}
+        return {"metrics_result": str(destination)}
+    if next(task for task in plan["tasks"] if task["id"] == "metrics")["action"] == "skip":
+        artifacts = metrics()
+        step = next(stage for stage in state["stages"] if stage["id"] == "metrics")
+        step.update(status="skipped", reason=state["data_analysis"]["reason"], execution="conditional_no_data", artifacts=artifacts)
+        save_state(root, state, "stage_skipped", stage="metrics", reason=step["reason"])
+    else:
+        execute_stage(root, state, "metrics", metrics)
 
     def analysis():
         destination = root / "analysis"
@@ -212,7 +239,7 @@ def create_handoff(root, state, paths):
     model = analysis_meta.get("model", "历史初稿（该快照未单独记录其模型）")
     (root / "original-review.md").write_text(render_report(original, bundle, {"model": model}), encoding="utf-8")
     mode_label = {"replay": "历史真实结果回放（本轮未调用模型）", "live": "本轮重新执行材料检查、取帧、分析和验证",
-                  "resume": "只恢复失败的验证阶段，前三步复用原流程结果",
+                  "resume": "只恢复失败的验证阶段，前置步骤复用原流程结果",
                   "verify": "复用已有分析与原始证据，真实执行一次新的验证"}[state["mode"]]
     lines = ["# 复盘流程总览", "", "**当前状态：等待人工复核。候选稿尚未接受。**", "",
              "运行方式：" + mode_label, "", "样本：" + state["sample_id"], "",
@@ -222,7 +249,8 @@ def create_handoff(root, state, paths):
     if state.get("parent_workflow"):
         lines.extend(["", "原流程已尝试 %s 个模型阶段，本次恢复单独限定 1 次。原失败记录保留：[%s](<%s>)。" % (
             state["parent_model_stage_attempts"], "原流程报告", (Path(state["parent_workflow"]) / "workflow.md").as_posix())])
-    lines.extend(["", "后台数据：" + ("已提供；数据分析角色尚未实现。" if state["platform_metrics_provided"] else "未提供，跳过数据比较。"), "",
+    data_note = "已有本地计算工具汇总，位置见 workflow.json 的 data_analysis.report；数据本身为用户录入。" if state.get("data_analysis", {}).get("status") == "completed" else "未提供，跳过数据比较。" if not state["platform_metrics_provided"] else "已有数据输入，但本轮未执行数据计算。"
+    lines.extend(["", "后台数据：" + data_note, "",
                   "验证角色判定：`" + metadata["decision"] + "`。即使模型均判定支持，本版也保留人工复核。", "",
                   "## 查看结果", "",
                   "- [原始分析](<%s>)" % (root / "original-review.md").as_posix(),
@@ -230,7 +258,7 @@ def create_handoff(root, state, paths):
                   "- [人工反馈表](<%s>)" % (root / "human-review.json").as_posix(),
                   "- [运行状态与停止理由](<%s>)" % (root / "workflow.json").as_posix(), "",
                   "## 复核入口", "", "双击项目目录的启动复核工作台.cmd。先读验证报告，再检查候选稿是否真的修正了问题。人工反馈默认全部 pending；在页面中保存草稿或提交，实际反馈另存 human-feedback.json。", "",
-                  "当前为固定顺序的两角色工作流；没有模型自主规划、自动返修循环、源码运行验证或发布操作。", ""])
+                  "当前为规则编排的两模型角色工作流；仅新 live 流程生成 plan.json 并执行数据条件分支，其它模式保留原始证据。没有模型自主规划、语义自动返修循环或发布操作。", ""])
     (root / "workflow.md").write_text("\n".join(lines), encoding="utf-8")
     save_state(root, state, "human_review_required", decision=metadata["decision"])
 

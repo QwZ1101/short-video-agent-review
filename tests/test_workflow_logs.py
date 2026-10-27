@@ -54,6 +54,16 @@ class LogTests(unittest.TestCase):
         self.assertNotIn("token", event)
         self.assertNotIn("payload", event)
 
+    def test_plan_is_readable_with_only_safe_fields(self):
+        self.state["plan"] = {"planner": "rules_v1", "goal": "点赞", "tasks": [
+            {"name": "计算", "role": "data", "tool": "calculator", "action": "skip",
+             "reason": "token=secret-example", "private_payload": "never-expose"}]}
+        (self.run / "workflow.json").write_text(json.dumps(self.state), encoding="utf-8")
+        plan = WorkflowLogs(self.root).detail("run-test")["plan"]
+        self.assertEqual(plan["tasks"][0]["action"], "skip")
+        self.assertNotIn("secret-example", json.dumps(plan))
+        self.assertNotIn("never-expose", json.dumps(plan))
+
     def test_request_log_rotates(self):
         log = RequestLog(self.root)
         try:

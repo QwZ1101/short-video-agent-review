@@ -19,6 +19,7 @@ import urllib.request
 import zipfile
 
 from check_materials import PROJECT_ROOT, load_sample, resolve_path
+from platform_metrics import calculate_metrics
 
 
 def write_json(path, value):
@@ -88,6 +89,9 @@ def build_evidence(sample, evidence_path, frame_limit=16):
             add(identifier, dict(read_zip_description(path), type="zip_description"))
     add("context-delivery", {"type": "user_provided_context", "content": sample.get("source_delivery"),
                              "scope": "任务单记录，本次没有重新访问网站或测试运行"})
+    metrics = calculate_metrics(sample.get("platform_metrics"))
+    if metrics["status"] == "completed":
+        add("metrics-calculated", dict(metrics, type="calculated_metrics"))
     task = {key: sample.get(key) for key in ("sample_id", "tutorial_goal", "audience", "audience_prior_knowledge", "review_question", "platform_metrics", "goal_revision", "success_criteria", "out_of_scope")}
     coverage = {"available_frames": len(video["frames"]), "selected_frames": len(chosen),
                 "subtitle_count": len(video["subtitles"]), "image_count": len(images),

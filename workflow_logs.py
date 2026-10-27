@@ -110,6 +110,12 @@ class WorkflowLogs:
                     for s in state.get("stages", [])[:30] if isinstance(s, dict)],
             events=[{k: redact(row.get(k)) for k in ("time", "event", "stage", "error")} for row in rows],
             invalid_event_lines=invalid, events_truncated=truncated)
+        plan = state.get("plan")
+        if isinstance(plan, dict) and isinstance(plan.get("tasks"), list):
+            result["plan"] = {"planner": redact(plan.get("planner"), 60),
+                "goal": redact(plan.get("goal")),
+                "tasks": [{k: redact(task.get(k)) for k in ("name", "role", "tool", "action", "reason")}
+                          for task in plan["tasks"][:30] if isinstance(task, dict)]}
         return result
 
 

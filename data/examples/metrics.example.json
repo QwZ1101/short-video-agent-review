@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "source": "合成演示数据，不是真实账号表现",
+  "observation_hours": 24,
+  "plays": 1000,
+  "plays_definition": "发布后24小时累计播放次数，包含重复播放",
+  "likes": 40,
+  "likes_definition": "同一24小时窗口结束时显示的点赞数",
+  "link_requests": 5,
+  "link_requests_definition": "同一24小时窗口内明确索要展示链接的评论人数，按账号去重，未包含私信"
+}

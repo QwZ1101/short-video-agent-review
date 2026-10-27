@@ -31,11 +31,14 @@ def load_resume_source(root):
     if state.get("mode") != "live" or state.get("status") != "failed":
         raise ValueError("只允许恢复一次失败的 live 流程，不能恢复回放或恢复流程")
     stages = state.get("stages", [])
-    if [item.get("id") for item in stages] != ["materials", "video", "analysis", "verification"]:
+    if [item.get("id") for item in stages] not in (["materials", "video", "analysis", "verification"],
+            ["materials", "video", "metrics", "analysis", "verification"]):
         raise ValueError("原流程阶段结构不符合恢复要求")
-    if any(item.get("status") != "completed" for item in stages[:3]) or stages[3].get("status") != "failed":
-        raise ValueError("恢复要求前三步成功且仅验证阶段失败")
-    analysis_dir = inside(stages[2]["artifacts"]["analysis_dir"], root)
+    if any(item.get("status") != "completed" and not (item["id"] == "metrics" and
+           item.get("status") == "skipped" and item.get("execution") == "conditional_no_data")
+           for item in stages[:-1]) or stages[-1].get("status") != "failed":
+        raise ValueError("恢复要求前置步骤成功或按计划跳过数据计算，且仅验证阶段失败")
+    analysis_dir = inside(next(item for item in stages if item["id"] == "analysis")["artifacts"]["analysis_dir"], root)
     original, bundle, images, fingerprints = load_review_run(analysis_dir)
     if original["sample_id"] != state.get("sample_id"):
         raise ValueError("原流程与分析样本不一致")
@@ -96,9 +99,10 @@ def recovery_state(source_root, source):
                  parent_model_stage_attempts=source["state"]["model_stage_attempts"],
                  model_stage_budget=1, model_stage_attempts=0,
                  human_review={"status": "unavailable", "reason": "恢复尚未完成"})
-    for stage in state["stages"][:3]:
-        stage["execution"] = "reused_from_parent_no_rerun"
-    state["stages"][3] = {"id": "verification", "name": "证据验证（一次格式修复）", "status": "pending"}
+    for stage in state["stages"][:-1]:
+        if stage["status"] == "completed":
+            stage["execution"] = "reused_from_parent_no_rerun"
+    state["stages"][-1] = {"id": "verification", "name": "证据验证（一次格式修复）", "status": "pending"}
     return state
 
 

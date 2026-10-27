@@ -85,6 +85,16 @@ class ResumeTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "只能恢复|只允许恢复"):
             load_resume_source(self.root)
 
+    def test_new_data_branch_can_resume_without_rerunning_data(self):
+        path = self.root / "workflow.json"
+        state = json.loads(path.read_text(encoding="utf-8"))
+        state["stages"].insert(2, {"id": "metrics", "status": "skipped", "execution": "conditional_no_data"})
+        write_json(path, state)
+        source = load_resume_source(self.root)
+        recovered = recovery_state(self.root, source)
+        self.assertEqual(recovered["stages"][-1]["status"], "pending")
+        self.assertEqual(recovered["stages"][2]["execution"], "conditional_no_data")
+
     def test_network_error_is_not_treated_as_format_failure(self):
         path = self.root / "verification/run-test/run.json"
         meta = json.loads(path.read_text(encoding="utf-8"))

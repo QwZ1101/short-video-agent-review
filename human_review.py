@@ -10,6 +10,7 @@ import uuid
 from check_materials import PROJECT_ROOT
 from review_tutorial import validate_review
 from run_workflow import check_saved_verification, now, read_json
+from local_storage import atomic_json
 
 FIELDS = ("observation", "interpretation", "suggestion", "validation_plan")
 LOCK = threading.RLock()
@@ -17,16 +18,6 @@ LOCK = threading.RLock()
 
 def digest(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
-
-
-def atomic_json(path, value):
-    temp = path.with_name(path.name + "." + uuid.uuid4().hex + ".tmp")
-    try:
-        temp.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-        temp.replace(path)
-    finally:
-        if temp.exists():
-            temp.unlink()
 
 
 def within(path, parent):
