@@ -13,6 +13,7 @@
 - 运行日志页：成功/失败流程、阶段耗时、事件与脱敏请求记录。
 - 材料驱动的规则任务计划、平台数据计算或跳过分支，详见 [计划与数据说明](docs/plans-and-metrics.md)。
 - 可选的有界语义返修与再次验证，缺证即停止，详见 [返修说明](docs/refinement.md)。
+- 同证据历史对照包、人工标注冻结与可复算指标，未确认草稿不计分，详见 [评估说明](docs/evaluation.md)。
 
 剩余开发与参赛演示验收见 [项目进度](docs/project-status.md)。
 
@@ -69,6 +70,7 @@ Node 只用于可选的前端语法检查，工作台运行本身不依赖 Node�
 | workflow_logs.py | 限量日志读取、脱敏、请求轮转日志 |
 | workflow_plan.py / platform_metrics.py | 任务计划、数据条件分支与可复算指标 |
 | refinement.py / revise_review.py / refine_workflow.py | 返修调度、单次修正及已有流程的有界继续 |
+| evaluate_reviews.py | 历史成对对照、冻结证据、人工标注及指标计算 |
 | review-ui/dist/ | 无构建依赖的本机页面 |
 
 源码包静态审计、自动剪辑、平台数据自动采集、自主规划与自动补证不属于当前已完成能力。

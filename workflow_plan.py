@@ -24,7 +24,7 @@ def build_plan(sample, budget):
         "ready": budget >= 2, "blocked_reason": "" if budget >= 2 else "完整分析与验证至少需要两个模型阶段预算",
         "execution_policy": "sequential_with_conditional_skip", "tasks": tasks,
         "human_review_required": True,
-        "limitations": ["规则决定分支，尚未实现模型自主规划和语义返修循环", "缺少真实数据时跳过计算，不补造指标"]}
+        "limitations": ["规则决定分支；可选返修由主流程显式启用，非模型自主规划", "缺少真实数据时跳过计算，不补造指标"]}
 
 
 if __name__ == "__main__":

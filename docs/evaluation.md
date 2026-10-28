@@ -1,0 +1,51 @@
+# 同证据对照与人工标注
+
+`evaluate_reviews.py` 复用一次成功流程中的分析初稿和验证候选稿，生成历史案例的成对对照。不调用 API，不修改工作台的人工复核或修改任务。两个角色可能使用同一模型，不能因此宣称不同模型之间的独立性。
+
+## 当前范围
+
+程序校验两组的原稿、证据清单和图片指纹一致，且与当前样本目标一致，然后复制结果、图片、文字材料与评判规则到新的本地评估包。后续原材料移动不影响这个快照。每组的总结、建议和每个引用分别标注；草稿不进入人工指标。
+
+目前使用已运行的调试案例，组别公开，标注在模型调用之后，因此是**回顾性开发评估**，不是预先冻结标准答案的测试集或盲评。这里只纳入成功的两阶段输出，没有所有尝试的分母，流程完成率保持未知。建议被人工支持不等于实际点赞或索链增加。
+
+## 使用
+
+准备同一流程的两个阶段目录和当前样本。占位路径替换为本地实际值：
+
+```powershell
+python evaluate_reviews.py prepare --analysis-dir reports/workflows/<run>/analysis/<stage> --verification-dir reports/workflows/<run>/verification/<stage> --sample data/samples/<sample>.json
+```
+
+输出位于 `reports/evaluations/eval-.../`，可用 `--output-dir` 指定尚不存在的目录。重复目录不会被覆盖。旧目标、不同证据、返修稿冒充单调用基线、调用口径不明都会被拒绝。
+
+打开 `review-packet.md` 查看目标、完整候选文本、冻结图片及字幕，按 `rubric.json` 编辑 `annotations.draft.json`：
+
+| 字段 | 填写方式 |
+| --- | --- |
+| `verdict` | `supported`、`revise`、`insufficient_evidence`，未判断保留 `null` |
+| `reason` | 每个已判断项的具体理由，不能仅以另一个模型的意见为依据 |
+| `provenance.actor` | 助手整理用 `assistant`；确实由人逐项判断后才改为 `human` |
+
+实际人工判断后，提交一次冻结记录：
+
+```powershell
+python evaluate_reviews.py freeze --packet reports/evaluations/<eval> --reviewer reviewer-01 --human-reviewed
+python evaluate_reviews.py score --packet reports/evaluations/<eval>
+```
+
+`--human-reviewed` 是操作者对人工评判的声明，不是程序的身份认证。不要由助手在没有人工评判时代为声明。允许部分标注，但须同时查看覆盖率；最好完成整包后冻结。如需更正则重新准备新包，保留旧提交。评估标注与工作台“采用建议”不会互相自动提交。
+
+## 指标口径
+
+- 建议支持比例：`supported 建议数 / 已判断建议数`。`revise` 和 `insufficient_evidence` 进入分母，未判断的 `null` 不进入分母；没有已判断项时为 `null`。
+- 引用支持比例：`supported 引用数 / 已判断引用数`，按“组别＋建议＋证据 ID”计数。同一建议内重复 ID 去重，不把引用存在性当作内容正确性。
+- 覆盖率：已判断项 / 总项数，建议和引用分别计算；空集合为未知。
+- 总结判断单列。`annotation_coverage_complete` 仅在两组总结、建议和引用全部完成时为真。
+- 初稿资源为分析阶段用量；“分析＋验证”为两个阶段之和。两组共用初稿，不能把两列再次相加当作本次开销。准备包与计算报告新增 0 次模型调用。
+- 耗时只累加已记录模型调用，不含抽帧和人工时间；tokens 为服务端记录，不计算价格。缺失为未知，零保留为零。
+
+`comparison.json` 保存分子、分母、比例和来源指纹，`comparison.md` 便于阅读。每次计分先核对材料和标注指纹，改变冻结文件会报错。哈希用于发现意外改动，不是数字签名。
+
+每包 `events.jsonl` 记录 UTC 时间、操作、追踪编号、耗时和脱敏错误摘要，不含标注正文或请求密钥。超过 256 KiB 后保留一份旧日志。评估包在 `reports/`，不上传 GitHub。
+
+下一阶段应在新增视频调用模型前登记样本集合、冻结事实标注和规则，并纳入所有失败尝试。独立留出案例不能用于调提示词；之后才能讨论完成率和泛化质量。已有两条调试视频仍作为开发案例保留。
