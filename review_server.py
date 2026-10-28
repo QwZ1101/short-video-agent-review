@@ -1,4 +1,4 @@
-"""仅监听本机的复核工作台；不执行源码，不调用模型，不接收任意文件路径。"""
+"""仅监听本机；复核页面只读模型结果，启动接口显式运行有预算的固定工作流。"""
 import argparse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
@@ -12,18 +12,22 @@ from check_materials import PROJECT_ROOT
 from human_review import ReviewStore, render_feedback
 from improvement_tasks import TaskStore, render_plan
 from workflow_logs import WorkflowLogs, RequestLog
+from workflow_jobs import JobStore
 
 STATIC = {"/": "index.html", "/app.js": "app.js", "/tasks.js": "tasks.js", "/style.css": "style.css",
-          "/logs": "logs.html", "/logs.js": "logs.js", "/logs.css": "logs.css"}
+          "/logs": "logs.html", "/logs.js": "logs.js", "/logs.css": "logs.css",
+          "/start": "start.html", "/start.js": "start.js", "/start.css": "start.css"}
 LOGGED_ROUTES = set(STATIC) | {"/api/health", "/api/session", "/api/runs", "/api/review", "/api/tasks",
     "/api/tasks/report", "/api/report", "/api/evidence", "/api/draft", "/api/submit",
-    "/api/tasks/create", "/api/tasks/save", "/api/logs", "/api/logs/run", "/api/logs/requests"}
+    "/api/tasks/create", "/api/tasks/save", "/api/logs", "/api/logs/run", "/api/logs/requests",
+    "/api/samples", "/api/samples/register", "/api/jobs", "/api/jobs/detail", "/api/jobs/plan", "/api/jobs/start"}
 
 
 class ReviewServer(ThreadingHTTPServer):
     def __init__(self, port=0, workspace=PROJECT_ROOT):
         self.store = ReviewStore(workspace)
         self.tasks = TaskStore(self.store)
+        self.jobs = JobStore(workspace)
         self.token = secrets.token_urlsafe(32)
         super().__init__(("127.0.0.1", port), Handler)
         self.workflow_logs = WorkflowLogs(workspace)
@@ -84,6 +88,12 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send({"token": self.server.token})
             if route.path == "/api/runs":
                 return self.send(self.server.store.list_runs())
+            if route.path == "/api/samples":
+                return self.send(self.server.jobs.samples())
+            if route.path == "/api/jobs":
+                return self.send(self.server.jobs.jobs())
+            if route.path == "/api/jobs/detail":
+                return self.send(self.server.jobs.detail(query.get("job", [""])[0]))
             if route.path == "/api/logs":
                 return self.send(self.server.workflow_logs.list_runs())
             if route.path == "/api/logs/requests":
@@ -121,7 +131,8 @@ class Handler(BaseHTTPRequestHandler):
         if not self.trusted() or not secrets.compare_digest(self.headers.get("X-Review-Token", ""), self.server.token):
             return self.send({"error": "访问校验失败，请刷新页面"}, status=403)
         route = urlparse(self.path)
-        if route.path not in ("/api/draft", "/api/submit", "/api/tasks/create", "/api/tasks/save"):
+        if route.path not in ("/api/draft", "/api/submit", "/api/tasks/create", "/api/tasks/save",
+                               "/api/samples/register", "/api/jobs/plan", "/api/jobs/start"):
             return self.send({"error": "接口不存在"}, status=404)
         try:
             size = int(self.headers.get("Content-Length", "0"))
@@ -130,6 +141,14 @@ class Handler(BaseHTTPRequestHandler):
             payload = json.loads(self.rfile.read(size))
             if not isinstance(payload, dict):
                 raise ValueError("请求格式不正确")
+            if route.path == "/api/samples/register":
+                return self.send(self.server.jobs.register(payload))
+            if route.path == "/api/jobs/plan":
+                return self.send(self.server.jobs.plan(payload))
+            if route.path == "/api/jobs/start":
+                if set(payload) != {"job_id"}:
+                    raise ValueError("启动请求仅接受已预览的任务编号")
+                return self.send(self.server.jobs.start(payload["job_id"]))
             if route.path == "/api/tasks/create":
                 return self.send({"plan": self.server.tasks.create(payload.get("run"))})
             if route.path == "/api/tasks/save":

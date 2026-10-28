@@ -8,6 +8,7 @@ import zipfile
 from unittest.mock import patch
 
 from review_tutorial import ModelNetworkError, build_evidence, call_dashscope, read_zip_description, select_frames, validate_review
+from review_tutorial import main as review_main
 
 
 class ReviewTests(unittest.TestCase):
@@ -32,6 +33,23 @@ class ReviewTests(unittest.TestCase):
         self.review["findings"][0]["evidence_ids"] = ["frame-999"]
         with self.assertRaisesRegex(ValueError, "证据"):
             validate_review(self.review, self.bundle)
+
+    def test_analysis_network_failure_updates_metadata_and_preserves_partial(self):
+        with tempfile.TemporaryDirectory() as directory:
+            self.bundle["coverage"] = {"image_count": 0}
+            with patch("sys.argv", ["review_tutorial.py", "--video-evidence", "fixture.json", "--output-dir", directory]), \
+                 patch("review_tutorial.load_sample", return_value={}), \
+                 patch("review_tutorial.build_evidence", return_value=(self.bundle, [])), \
+                 patch("review_tutorial.call_dashscope", side_effect=ModelNetworkError("fixture connection closed", partial_content="unfinished")) as model:
+                self.assertEqual(review_main(), 1)
+            run = next(Path(directory).glob("run-*"))
+            metadata = json.loads((run / "run.json").read_text(encoding="utf-8"))
+            self.assertEqual(metadata["status"], "failed")
+            self.assertEqual(metadata["error_kind"], "network_or_incomplete_stream")
+            self.assertIn("elapsed_seconds", metadata)
+            self.assertEqual((run / "partial-output.txt").read_text(), "unfinished")
+            self.assertFalse((run / "review.json").exists())
+            model.assert_called_once()
 
     def test_rejects_wrong_sample(self):
         self.review["sample_id"] = "other"

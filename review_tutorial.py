@@ -286,7 +286,7 @@ def main():
     parser.add_argument("--model", default=os.environ.get("DASHSCOPE_MODEL") or "qwen3.8-flash")
     parser.add_argument("--dry-run", action="store_true", help="只整理证据，不调用 API")
     args = parser.parse_args()
-    run_dir = None
+    run_dir, metadata, started = None, {}, None
     try:
         sample = load_sample(resolve_path(args.sample, PROJECT_ROOT))
         path = args.video_evidence
@@ -329,6 +329,14 @@ def main():
     except (OSError, ValueError, KeyError, IndexError, TypeError, zipfile.BadZipFile) as error:
         message = str(error)
         if run_dir:
+            metadata.update(status="failed", error=message)
+            if started is not None:
+                metadata["elapsed_seconds"] = round(time.monotonic() - started, 2)
+            if isinstance(error, ModelNetworkError):
+                metadata.update(error_kind="network_or_incomplete_stream", transport=error.transport)
+                if error.partial_content:
+                    (run_dir / "partial-output.txt").write_text(error.partial_content, encoding="utf-8")
+            write_json(run_dir / "run.json", metadata)
             write_json(run_dir / "failure.json", {"status": "failed", "error": message})
         print("复盘失败：" + message, file=sys.stderr)
         return 1

@@ -1,7 +1,7 @@
 'use strict';
 const byId=id=>document.getElementById(id);
 const statuses={failed:'失败',running:'运行中',awaiting_human_review:'等待复核',human_reviewed:'复核已提交',completed:'完成',skipped:'跳过',pending:'待执行'};
-let runs=[],selected='',generation=0;
+let runs=[],selected=new URLSearchParams(location.search).get('run')||'',generation=0;
 function el(tag,text,cls){const n=document.createElement(tag);if(text!==undefined)n.textContent=String(text);if(cls)n.className=cls;return n;}
 function time(value){if(!value)return '—';const d=new Date(value);return isNaN(d)?String(value):d.toLocaleString('zh-CN');}
 function duration(value){return value===null||value===undefined?'—':value+' 秒';}

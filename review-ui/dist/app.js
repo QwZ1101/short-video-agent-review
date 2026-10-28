@@ -144,5 +144,6 @@ window.addEventListener('beforeunload',event=>{if(dirty||window.TaskBoard.isDirt
 (async()=>{try{token=(await api('/api/session')).token;const list=await api('/api/runs');$('runs').replaceChildren();
   for(const run of list.runs){const option=el('option',run.sample_id+' · '+run.id.replace(/^(run|resume)-/,''));option.value=run.id;$('runs').append(option);}
   if(!list.runs.length){$('loading').hidden=true;message('还没有可以复核的任务。请先完成内容分析与证据验证。');return;}
-  await loadRun(list.runs.some(x=>x.id===list.selected)?list.selected:list.runs[0].id);
+  const requested=new URLSearchParams(location.search).get('run');
+  await loadRun(list.runs.some(x=>x.id===requested)?requested:list.runs.some(x=>x.id===list.selected)?list.selected:list.runs[0].id);
 }catch(error){$('loading').hidden=true;message('工作台连接失败：'+error.message);}})();

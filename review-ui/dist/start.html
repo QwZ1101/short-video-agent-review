@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>运行任务 · 复盘工作台</title><link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/start.css"><script defer src="/start.js"></script></head>
+<body><main class="start-main">
+<header><a href="/">← 人工复核</a><a href="/logs">运行日志 ↗</a><span>本机工作台</span></header>
+<section class="intro"><div><div class="eyebrow">CREATE / PLAN / RUN</div><h1>从一条视频，开始复盘。</h1><p>登记材料，查看计划，再决定本轮运行的预算。</p></div><span class="badge">默认 2 次模型调用上限</span></section>
+<div id="message" role="status" aria-live="polite"></div>
+<div class="start-grid"><section class="start-card">
+<h2>01 · 选择样本</h2><label class="field"><span>已登记样本</span><select id="samples"><option value="">正在读取…</option></select></label><p id="sample-goal" class="helper"></p>
+<details><summary>登记新视频</summary><form id="register-form">
+<label class="field"><span>样本编号（可选）</span><input name="sample_id" placeholder="例如 tutorial-003" pattern="[a-z][a-z0-9_-]{0,63}" maxlength="64"></label>
+<label class="field"><span>视频的本地完整路径</span><input name="video" required placeholder="D:\视频\作品.mp4" maxlength="2000"></label>
+<label class="field"><span>SRT 字幕路径（可选）</span><input name="transcript" placeholder="没有字幕可留空" maxlength="2000"></label>
+<label class="field"><span>希望观众看完后做什么</span><textarea name="goal" required maxlength="8000">观众愿意索要粒子展示网页链接，或者点赞，任一即可；不要求下载源码或本地运行。</textarea></label>
+<label class="field"><span>目标受众</span><input name="audience" required value="对 AI 编程和粒子特效感兴趣的观众" maxlength="2000"></label>
+<label class="field"><span>观众已有基础</span><input name="prior_knowledge" required value="能够浏览网页，没有编程基础" maxlength="2000"></label>
+<p class="helper">登记仅检查本地材料，不调用模型。新样本不继承其他视频的截图或结论。</p><button class="secondary" id="register" type="submit">登记样本</button>
+</form></details>
+<h2 class="spaced">02 · 查看计划</h2><label class="field"><span>本轮模型调用上限</span><select id="budget"><option value="0">2 次 · 分析＋验证</option><option value="1">4 次 · 最多追加 1 轮返修</option><option value="2">6 次 · 最多追加 2 轮返修</option></select></label>
+<p class="helper">返修仅在证据充分且需要修改时执行。证据不足即停止，最终仍由人工复核。</p><button id="plan" class="primary" type="button">检查材料并预览计划</button>
+</section><section class="start-card"><h2>03 · 确认本轮运行</h2><div id="plan-view"><p class="empty">选好样本后，先查看将要执行的步骤。</p></div><div id="start-actions" hidden><p class="disclosure">点击启动后，所选帧图、字幕及配套材料会发送至配置的大模型服务，产生 API 用量。登记和预览计划不调用模型。</p><button id="start" class="primary" type="button">启动本轮复盘</button></div></section></div>
+<section class="start-card progress-card"><div class="section-head"><h2>运行进度</h2><button id="refresh" class="secondary" type="button">刷新记录</button></div><label class="field"><span>网页启动记录（最近 50 条）</span><select id="jobs"><option value="">暂无记录</option></select></label><div id="job-view" aria-live="polite"><p class="empty">任务启动后，这里显示实际阶段和调用次数。</p></div><p class="helper">关闭页面不会停止后台任务。请求失败或刷新页面不会自动重跑；同一启动请求只执行一次。网页同一时间运行一个任务。</p></section>
+</main></body></html>

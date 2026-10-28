@@ -20,6 +20,8 @@
 
 ## 工作台请求记录
 
+网页启动任务另有 `reports/web-jobs/job-.../events.jsonl`，保存计划、启动、完成或失败的 UTC 时间与追踪编号。HTTP 日志覆盖样本登记、计划和启动接口。工作进度与失败详情仍由 `reports/workflows/run-web-.../` 中的原有阶段记录提供；工作进程日志保存在对应网页任务目录。新分析失败会将阶段 `run.json` 标为 failed，网络中断的已有部分输出另存。详见 [网页启动](web-start.md)。
+
 `reports/review-server/requests.jsonl` 为应用处理的 GET/POST 响应记录 UTC 时间、请求编号、请求方法、白名单接口名、HTTP 状态码和耗时（毫秒）。响应头 `X-Request-ID` 可用于定位请求。HTTP 解析层拒绝的畸形请求不在此日志范围内。
 
 不记录查询参数、请求/响应正文、API 密钥、会话令牌、IP 或用户代理。未知接口统一记为 `[other]`。单个日志上限为 1 MiB，最多保留 3 份轮转备份。页面只展示当前文件末尾的 50 条请求，早期轮转记录仍可在本地查看。
