@@ -1,5 +1,6 @@
 """仅监听本机；复核页面只读模型结果，启动接口显式运行有预算的固定工作流。"""
 import argparse
+import errno
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import mimetypes
@@ -161,11 +162,22 @@ class Handler(BaseHTTPRequestHandler):
             self.send({"error": self.safe_error(error)}, status=409)
 
 
+def create_server(port=0, preferred_port=0):
+    try:
+        return ReviewServer(port or preferred_port)
+    except OSError as error:
+        # Never stop a different process that has taken the previous port.
+        if not port and preferred_port and (error.errno == errno.EADDRINUSE or getattr(error, "winerror", None) == 10048):
+            return ReviewServer(0)
+        raise
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", type=int, default=0)
+    parser.add_argument("--preferred-port", type=int, default=0)
     args = parser.parse_args()
-    server = ReviewServer(args.port)
+    server = create_server(args.port, args.preferred_port)
     print("http://127.0.0.1:%s" % server.server_port, flush=True)
     server.serve_forever()
 

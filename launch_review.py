@@ -8,9 +8,23 @@ import sys
 import time
 import urllib.request
 import webbrowser
+from urllib.parse import urlparse
 
 from check_materials import PROJECT_ROOT
 from human_review import atomic_json
+
+
+def previous_port(state):
+    """Reuse this workspace's old loopback origin without trusting arbitrary URLs."""
+    try:
+        if Path(state.get("workspace", "")).resolve() != PROJECT_ROOT.resolve():
+            return 0
+        parsed = urlparse(state.get("url", ""))
+        if parsed.scheme == "http" and parsed.hostname == "127.0.0.1" and not parsed.username and not parsed.password:
+            return parsed.port or 0
+    except (ValueError, TypeError):
+        pass
+    return 0
 
 
 def healthy(url):
@@ -43,7 +57,8 @@ def main():
         else:
             options["start_new_session"] = True
         with out_path.open("w") as stdout, err_path.open("w") as stderr:
-            child = subprocess.Popen([sys.executable, str(PROJECT_ROOT / "review_server.py")],
+            child = subprocess.Popen([sys.executable, str(PROJECT_ROOT / "review_server.py"),
+                "--preferred-port", str(previous_port(previous))],
                 cwd=str(PROJECT_ROOT), stdin=subprocess.DEVNULL, stdout=stdout, stderr=stderr, **options)
         for _ in range(40):
             lines = out_path.read_text(encoding="utf-8").splitlines()
