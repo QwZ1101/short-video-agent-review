@@ -14,14 +14,17 @@ from human_review import ReviewStore, render_feedback
 from improvement_tasks import TaskStore, render_plan
 from workflow_logs import WorkflowLogs, RequestLog
 from workflow_jobs import JobStore
+from screenshot_metrics import ScreenshotStore
 
 STATIC = {"/": "index.html", "/app.js": "app.js", "/tasks.js": "tasks.js", "/style.css": "style.css",
+          "/metrics": "metrics.html", "/metrics.js": "metrics.js", "/metrics.css": "metrics.css",
           "/logs": "logs.html", "/logs.js": "logs.js", "/logs.css": "logs.css",
           "/start": "start.html", "/start.js": "start.js", "/start.css": "start.css"}
 LOGGED_ROUTES = set(STATIC) | {"/api/health", "/api/session", "/api/runs", "/api/review", "/api/tasks",
     "/api/tasks/report", "/api/report", "/api/evidence", "/api/draft", "/api/submit",
     "/api/tasks/create", "/api/tasks/save", "/api/logs", "/api/logs/run", "/api/logs/requests",
-    "/api/samples", "/api/samples/register", "/api/jobs", "/api/jobs/detail", "/api/jobs/plan", "/api/jobs/start"}
+    "/api/samples", "/api/samples/register", "/api/jobs", "/api/jobs/detail", "/api/jobs/plan", "/api/jobs/start",
+    "/api/metrics", "/api/metrics/detail", "/api/metrics/image", "/api/metrics/upload", "/api/metrics/recognize", "/api/metrics/confirm"}
 
 
 class ReviewServer(ThreadingHTTPServer):
@@ -29,6 +32,7 @@ class ReviewServer(ThreadingHTTPServer):
         self.store = ReviewStore(workspace)
         self.tasks = TaskStore(self.store)
         self.jobs = JobStore(workspace)
+        self.metrics = ScreenshotStore(workspace)
         self.token = secrets.token_urlsafe(32)
         super().__init__(("127.0.0.1", port), Handler)
         self.workflow_logs = WorkflowLogs(workspace)
@@ -87,6 +91,13 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send({"app": "tutorial-human-review", "workspace": str(self.server.store.workspace)})
             if route.path == "/api/session":
                 return self.send({"token": self.server.token})
+            if route.path == "/api/metrics":
+                return self.send(self.server.metrics.listing())
+            if route.path == "/api/metrics/detail":
+                return self.send(self.server.metrics.read(query.get('id', [''])[0]))
+            if route.path == "/api/metrics/image":
+                path, mime = self.server.metrics.image(query.get('id', [''])[0])
+                return self.send(path.read_bytes(), mime)
             if route.path == "/api/runs":
                 return self.send(self.server.store.list_runs())
             if route.path == "/api/samples":
@@ -133,15 +144,27 @@ class Handler(BaseHTTPRequestHandler):
             return self.send({"error": "访问校验失败，请刷新页面"}, status=403)
         route = urlparse(self.path)
         if route.path not in ("/api/draft", "/api/submit", "/api/tasks/create", "/api/tasks/save",
+                               "/api/metrics/upload", "/api/metrics/recognize", "/api/metrics/confirm",
                                "/api/samples/register", "/api/jobs/plan", "/api/jobs/start"):
             return self.send({"error": "接口不存在"}, status=404)
         try:
             size = int(self.headers.get("Content-Length", "0"))
-            if not 0 < size <= 300000 or self.headers.get("Content-Type", "").split(";")[0] != "application/json":
+            limit = 15*1024*1024 if route.path == '/api/metrics/upload' else 300000
+            if not 0 < size <= limit or self.headers.get("Content-Type", "").split(";")[0] != "application/json":
                 raise ValueError("请求类型或大小不正确")
             payload = json.loads(self.rfile.read(size))
             if not isinstance(payload, dict):
                 raise ValueError("请求格式不正确")
+            if route.path == '/api/metrics/upload':
+                return self.send(self.server.metrics.upload(payload))
+            if route.path == '/api/metrics/recognize':
+                if set(payload) != {'id'}:
+                    raise ValueError('识别请求仅接受截图编号')
+                return self.send(self.server.metrics.start(payload['id']))
+            if route.path == '/api/metrics/confirm':
+                if set(payload) != {'id', 'confirmation'}:
+                    raise ValueError('确认请求结构不正确')
+                return self.send(self.server.metrics.confirm(payload['id'], payload['confirmation']))
             if route.path == "/api/samples/register":
                 return self.send(self.server.jobs.register(payload))
             if route.path == "/api/jobs/plan":
