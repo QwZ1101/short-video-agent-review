@@ -5,7 +5,7 @@
 <header><a href="/">← 人工复核</a><a href="/metrics">截图数据 ↗</a><a href="/logs">运行日志 ↗</a><span>本机工作台</span></header>
 <section class="intro"><div><div class="eyebrow">CREATE / PLAN / RUN</div><h1>从一条视频，开始复盘。</h1><p>登记材料，查看计划，再决定本轮运行的预算。</p></div><span class="badge">默认 2 次模型调用上限</span></section>
 <div id="message" role="status" aria-live="polite"></div>
-<div class="start-grid"><section class="start-card">
+<section class="start-card">
 <h2>01 · 选择样本</h2><label class="field"><span>已登记样本</span><select id="samples"><option value="">正在读取…</option></select></label><p id="sample-goal" class="helper"></p>
 <details><summary>登记新视频</summary><form id="register-form">
 <label class="field"><span>样本编号（可选）</span><input name="sample_id" placeholder="例如 tutorial-003" pattern="[a-z][a-z0-9_-]{0,63}" maxlength="64"></label>
@@ -16,8 +16,20 @@
 <label class="field"><span>观众已有基础</span><input name="prior_knowledge" required value="能够浏览网页，没有编程基础" maxlength="2000"></label>
 <p class="helper">登记仅检查本地材料，不调用模型。新样本不继承其他视频的截图或结论。</p><button class="secondary" id="register" type="submit">登记样本</button>
 </form></details>
-<h2 class="spaced">02 · 查看计划</h2><label class="field"><span>本轮模型调用上限</span><select id="budget"><option value="0">2 次 · 分析＋验证</option><option value="1">4 次 · 最多追加 1 轮返修</option><option value="2">6 次 · 最多追加 2 轮返修</option></select></label>
+</section>
+<section class="start-card data-card"><h2>02 · 添加这条视频的平台数据</h2>
+<p class="helper">上传作品数据截图，在本页识别并核对。确认后选择用于本轮复盘，数字会进入“计算平台数据”和内容分析。</p>
+<label class="field"><span>本轮使用的截图数据</span><select id="metrics-record"><option value="">不使用截图数据（保留样本原有数据）</option></select></label>
+<p id="metrics-summary" class="helper">未选择截图。</p>
+<label class="data-match"><input id="metrics-match" type="checkbox"> 我确认所选截图属于上方这条视频，已核对作品和统计时间</label>
+<button id="refresh-metrics" class="secondary" type="button">刷新截图记录</button>
+<details id="metrics-editor"><summary>上传截图 / 识别与人工核对（在本页完成）</summary>
+<iframe id="metrics-frame" title="上传截图并核对平台数据"></iframe></details>
+<p class="helper">截图识别单独使用 1 次模型调用。复盘计算不额外调用模型；原图和人工核对记录保留，历史复盘不改写。统计范围不确定时只展示核对值，不计算比值。</p>
+</section>
+<div class="start-grid"><section class="start-card">
+<h2>03 · 查看计划</h2><label class="field"><span>本轮模型调用上限</span><select id="budget"><option value="0">2 次 · 分析＋验证</option><option value="1">4 次 · 最多追加 1 轮返修</option><option value="2">6 次 · 最多追加 2 轮返修</option></select></label>
 <p class="helper">返修仅在证据充分且需要修改时执行。证据不足即停止，最终仍由人工复核。</p><button id="plan" class="primary" type="button">检查材料并预览计划</button>
-</section><section class="start-card"><h2>03 · 确认本轮运行</h2><div id="plan-view"><p class="empty">选好样本后，先查看将要执行的步骤。</p></div><div id="start-actions" hidden><p class="disclosure">点击启动后，所选帧图、字幕及配套材料会发送至配置的大模型服务，产生 API 用量。登记和预览计划不调用模型。</p><button id="start" class="primary" type="button">启动本轮复盘</button></div></section></div>
+</section><section class="start-card"><h2>04 · 确认本轮运行</h2><div id="plan-view"><p class="empty">选好样本后，先查看将要执行的步骤。</p></div><div id="start-actions" hidden><p class="disclosure">点击启动后，所选帧图、字幕、已核对的平台数据及配套材料会发送至配置的大模型服务，产生 API 用量。登记和预览计划不调用模型。</p><button id="start" class="primary" type="button">启动本轮复盘</button></div></section></div>
 <section class="start-card progress-card"><div class="section-head"><h2>运行进度</h2><button id="refresh" class="secondary" type="button">刷新记录</button></div><label class="field"><span>网页启动记录（最近 50 条）</span><select id="jobs"><option value="">暂无记录</option></select></label><div id="job-view" aria-live="polite"><p class="empty">任务启动后，这里显示实际阶段和调用次数。</p></div><p class="helper">关闭页面不会停止后台任务。请求失败或刷新页面不会自动重跑；同一启动请求只执行一次。网页同一时间运行一个任务。</p></section>
 </main></body></html>

@@ -1,3 +1,4 @@
+import base64
 from concurrent.futures import ThreadPoolExecutor
 import json
 import os
@@ -36,6 +37,76 @@ class WebJobTests(unittest.TestCase):
         with patch.object(self.store, "launch", return_value=Mock(pid=os.getpid())) as launch:
             result = self.store.start(identifier)
         return result, launch
+
+    def screenshot(self, scope='cumulative', sample_id=''):
+        from screenshot_metrics import ScreenshotStore, FIELDS
+        store = ScreenshotStore(self.root)
+        image = b'\x89PNG\r\n\x1a\n' + b'synthetic fixture image'
+        record = store.upload({'image_base64': base64.b64encode(image).decode()})
+        metrics = {k: None for k in FIELDS}
+        metrics.update(plays='2791', likes='53', comments='10', danmaku='0', completion_rate='2.39%')
+        store.confirm(record['id'], dict(reviewed=True, title='fixture screenshot', sample_id=sample_id,
+            observed_at='2026-11-01T16:42:00+08:00', scope=scope, metrics=metrics, note=''))
+        return store, record['id']
+
+    def test_screenshot_enters_frozen_plan_and_citable_evidence(self):
+        from review_tutorial import build_evidence
+        screenshot, identifier = self.screenshot()
+        original_sample = self.sample.read_bytes()
+        job = self.plan(metrics_record_id=identifier, metrics_match_confirmed=True)
+        self.assertEqual(job['plan']['tasks'][2]['action'], 'execute')
+        sample = read(self.store.root(job['id']) / 'sample.json')
+        self.assertEqual(sample['platform_metrics']['metrics']['plays'], 2791)
+        self.assertEqual(sample['platform_metrics']['source']['record_id'], identifier)
+        self.assertEqual(self.sample.read_bytes(), original_sample)
+        evidence = self.root / 'evidence.json'
+        (self.root / 'frame.jpg').write_bytes(b'frame fixture')
+        atomic_json(evidence, dict(sample_id='test-video', source_video=str(self.video), timestamp_kind='requested',
+            frames=[dict(id='frame-1', image_path='frame.jpg', requested_time_seconds=0)], subtitles=[]))
+        bundle, images = build_evidence(sample, evidence)
+        calculated = bundle['catalog']['metrics-calculated']
+        self.assertAlmostEqual(calculated['calculations'][0]['per_100_plays'], 1.899, places=4)
+        self.assertEqual(calculated['reported_metrics']['completion_rate'], 2.39)
+        self.assertNotIn('link_requests', calculated['reported_metrics'])
+        self.assertEqual(len(images), 2)
+        self.assertIn('material-' + identifier, bundle['catalog'])
+        self.assertEqual(self.launch_fake(job['id'])[1].call_count, 1)
+
+    def test_screenshot_human_gate_mismatch_and_tampering(self):
+        screenshot, identifier = self.screenshot(sample_id='test-video')
+        with self.assertRaisesRegex(ValueError, '确认截图'):
+            self.plan(metrics_record_id=identifier)
+        with self.assertRaisesRegex(ValueError, '不一致'):
+            screenshot.for_workflow(identifier, 'another-video', True)
+        unconfirmed = screenshot.upload({'image_base64': base64.b64encode(b'\x89PNG\r\n\x1a\n' + b'fixture image').decode()})
+        with self.assertRaisesRegex(ValueError, '尚未人工'):
+            self.plan(metrics_record_id=unconfirmed['id'], metrics_match_confirmed=True)
+        job = self.plan(metrics_record_id=identifier, metrics_match_confirmed=True)
+        record = screenshot.read(identifier)
+        record['confirmation']['note'] = 'changed after plan'
+        atomic_json(screenshot.root(identifier) / 'record.json', record)
+        with self.assertRaisesRegex(ValueError, '变化'):
+            self.store.start(job['id'])
+        self.assertFalse(self.store.slot.exists())
+        job = self.plan(metrics_record_id=identifier, metrics_match_confirmed=True)
+        image, _ = screenshot.image(identifier)
+        image.write_bytes(b'changed image')
+        with self.assertRaisesRegex(ValueError, '原始截图已改变'):
+            self.store.start(job['id'])
+
+    def test_unknown_scope_only_reports_values_and_missing_is_not_zero(self):
+        from platform_metrics import calculate_metrics
+        screenshot, identifier = self.screenshot(scope='unknown')
+        raw = screenshot.for_workflow(identifier, 'test-video', True)
+        result = calculate_metrics(raw)
+        self.assertEqual(result['status'], 'completed')
+        self.assertEqual(result['calculations'], [])
+        self.assertIsNone(result['reported_metrics']['shares'])
+        self.assertEqual(result['reported_metrics']['danmaku'], 0)
+        self.assertNotIn('observation_hours', raw)
+        raw['metrics']['completion_rate'] = 101
+        with self.assertRaises(ValueError):
+            calculate_metrics(raw)
 
     def test_plan_freezes_budget_without_model_or_process(self):
         with patch("workflow_jobs.subprocess.Popen", side_effect=AssertionError("no process")), patch("review_tutorial.call_dashscope", side_effect=AssertionError("no API")):

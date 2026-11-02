@@ -67,7 +67,9 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("X-Request-ID", self.request_id)
-        self.send_header("Content-Security-Policy", "default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
+        # Only the screenshot editor may be embedded by this same local origin.
+        ancestors = "'self'" if urlparse(self.path).path == '/metrics' else "'none'"
+        self.send_header("Content-Security-Policy", "default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self'; frame-ancestors " + ancestors + "; base-uri 'none'; form-action 'self'")
         self.end_headers()
         try:
             self.wfile.write(body)

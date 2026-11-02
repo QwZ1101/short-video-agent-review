@@ -122,6 +122,26 @@ class ScreenshotStore:
         self.event(root, 'upload', image_bytes=len(raw), sha256=state['sha256'])
         return state
 
+    def for_workflow(self, identifier, sample_id, match_confirmed):
+        if match_confirmed is not True:
+            raise ValueError('请确认截图属于本轮所选视频')
+        state = self.read(identifier)
+        c = state.get('confirmation')
+        if state['status'] != 'confirmed' or not c or c.get('reviewed') is not True:
+            raise ValueError('截图数据尚未人工核对，请先确认保存')
+        if c['sample_id'] and c['sample_id'] != sample_id:
+            raise ValueError('截图关联的视频与本轮样本不一致')
+        self.image(identifier)
+        if c['source_sha256'] != state['sha256']:
+            raise ValueError('截图确认来源不一致，请重新导入')
+        normalized = {k: number(v, k in RATES) for k, v in c['metrics'].items()}
+        if normalized != c['normalized']:
+            raise ValueError('截图确认数据不一致')
+        return dict(schema_version=2, source=dict(record_id=identifier, sha256=state['sha256'],
+            confirmed_at=c['confirmed_at'], title=c['title'], sample_id=sample_id),
+            observed_at=c['observed_at'], scope=c['scope'], note=c['note'], metrics=normalized,
+            approximate_fields=c['approximate_fields'])
+
     def start(self, identifier):
         with LOCK:
             root = self.root(identifier)

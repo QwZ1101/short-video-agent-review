@@ -20,7 +20,7 @@ def build_plan(sample, budget):
             "model_calls": 1 if identifier in ("analysis", "verification") else 0})
     return {"schema_version": 1, "planner": "rules_v1", "sample_id": sample["sample_id"],
         "goal_revision": sample.get("goal_revision"), "goal": sample["tutorial_goal"],
-        "model_stage_budget": budget, "required_model_stages": 2,
+        "model_stage_budget": budget, "required_model_stages": 2, "platform_data": data,
         "ready": budget >= 2, "blocked_reason": "" if budget >= 2 else "完整分析与验证至少需要两个模型阶段预算",
         "execution_policy": "sequential_with_conditional_skip", "tasks": tasks,
         "human_review_required": True,

@@ -152,14 +152,18 @@ class JobStore:
         return blockers, report["missing_context"]
 
     def plan(self, payload):
-        if set(payload) != {"sample_id", "max_model_calls", "max_repair_rounds"}:
+        required = {"sample_id", "max_model_calls", "max_repair_rounds"}
+        if not required <= set(payload) or set(payload) - required - {'metrics_record_id', 'metrics_match_confirmed'}:
             raise ValueError("计划请求字段不正确")
         budget, rounds = payload["max_model_calls"], payload["max_repair_rounds"]
         if type(rounds) is not int or rounds not in (0, 1, 2) or type(budget) is not int or budget != 2 + 2 * rounds:
             raise ValueError("网页预算需为 2 / 4 / 6 次，分别对应 0 / 1 / 2 轮可选返修")
         sample, fingerprint = self.inputs(payload["sample_id"])
+        self.attach_metrics(sample, fingerprint, payload)
         blockers, warnings = self.preflight(sample)
         plan = build_plan(sample, budget)
+        if plan['platform_data']['status'] == 'completed':
+            warnings = [w for w in warnings if w != '后台数据已填写，但本步骤尚未验证其字段、口径和数值']
         root = self.root("job-" + uuid.uuid4().hex)
         root.mkdir()
         atomic_json(root / "sample.json", sample)
@@ -173,6 +177,19 @@ class JobStore:
         atomic_json(root / "job.json", state)
         event(root, "plan_created", ready=state["ready"], model_stage_budget=budget)
         return self.detail(root.name)
+
+    def attach_metrics(self, sample, fingerprint, request):
+        identifier = request.get('metrics_record_id')
+        if not identifier:
+            return
+        # Lazy import avoids the screenshot store / job store module cycle.
+        from screenshot_metrics import ScreenshotStore
+        store = ScreenshotStore(self.workspace)
+        sample['platform_metrics'] = store.for_workflow(identifier, sample['sample_id'], request.get('metrics_match_confirmed'))
+        image, _ = store.image(identifier)
+        sample.setdefault('supporting_materials', []).append({
+            'id': identifier, 'type': 'screenshot', 'path': str(image)})
+        fingerprint['metrics_record_sha256'] = digest(store.root(identifier) / 'record.json')
 
     def launch(self, root):
         flags = {"creationflags": subprocess.DETACHED_PROCESS | subprocess.CREATE_NO_WINDOW} if os.name == "nt" else {"start_new_session": True}
@@ -193,6 +210,7 @@ class JobStore:
         if state["status"] != "planned" or digest(root / "request.json") != state["request_sha256"] or digest(root / "sample.json") != request["snapshot_sha256"]:
             raise ValueError("计划内容已改变，请重新生成计划")
         sample, fingerprint = self.inputs(request["sample_id"])
+        self.attach_metrics(sample, fingerprint, request)
         if fingerprint != request["fingerprint"]:
             raise ValueError("样本或材料在预览后发生变化，请重新生成计划")
         blockers, _ = self.preflight(sample)
@@ -274,7 +292,8 @@ def execute(store, identifier):
     try:
         if job["status"] != "queued" or digest(root / "request.json") != job["request_sha256"] or digest(root / "sample.json") != request["snapshot_sha256"]:
             raise ValueError("启动快照不匹配")
-        _, fingerprint = store.inputs(request["sample_id"])
+        sample, fingerprint = store.inputs(request["sample_id"])
+        store.attach_metrics(sample, fingerprint, request)
         if fingerprint != request["fingerprint"]:
             raise ValueError("启动前材料已变化，停止调用")
         atomic_json(root / "process.json", {"pid": os.getpid()})

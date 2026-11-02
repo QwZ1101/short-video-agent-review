@@ -106,6 +106,9 @@ class ScreenshotTests(unittest.TestCase):
             with self.assertRaises(urllib.error.HTTPError) as error:
                 opener.open(urllib.request.Request(base+'/api/metrics/confirm',data=body,headers=headers))
             self.assertEqual(error.exception.code,403)
-        self.assertEqual(opener.open(base+'/metrics').status,200)
+        editor = opener.open(base+'/metrics?embed=1')
+        self.assertEqual(editor.status,200)
+        self.assertIn("frame-ancestors 'self'", editor.headers['Content-Security-Policy'])
+        self.assertIn("frame-ancestors 'none'", opener.open(base+'/start').headers['Content-Security-Policy'])
         result=json.load(opener.open(urllib.request.Request(base+'/api/metrics/confirm',data=body,headers={'Content-Type':'application/json','X-Review-Token':server.token})))
         self.assertEqual(result['status'],'confirmed')
