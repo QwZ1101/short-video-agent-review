@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>下一条改进 · 复盘工作台</title><link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/cycles.css"><script defer src="/cycles.js"></script></head>
+<body><main class="cycle-main">
+<header><strong>复盘　/　创作工作区</strong><a href="/logs">运行记录</a><span>本机工作台</span></header>
+<section class="intro"><div><div class="eyebrow">CREATOR WORKSPACE</div><h1>让下一条，更有方向。</h1><p id="flow-description">复盘、挑选、实践、比较。一次专注一步。</p></div><button id="exit-cycle" class="secondary" type="button">结束本轮，重新开始</button></section>
+<nav id="flow-steps" aria-label="创作循环"><button type="button" data-step="0">01　复盘 A</button><button type="button" data-step="1">02　选 1～2 条</button><button type="button" data-step="2">03　应用并复盘 B</button><button type="button" data-step="3">04　比较与总结</button></nav>
+<section id="prepare-a" class="cycle-card"><h2>先选一条视频，看看哪里值得改</h2><p class="helper">登记、截图和复盘都在这里完成；已有复核可直接挑选建议。</p><div class="row"><button id="open-a" type="button" class="primary">选择视频 / 开始复盘</button><button id="choose-a" type="button" class="secondary">已有复核，去挑建议 →</button></div></section>
+<section id="inline-work" class="cycle-card" hidden><div class="row"><h2 id="inline-title">处理材料</h2><button id="return-work" class="secondary" type="button">完成，返回本轮</button></div><iframe id="work-frame" title="本轮视频复盘和截图核对"></iframe></section>
+<div id="cycle-message" role="status" aria-live="polite"></div>
+<details class="history-drawer"><summary>切换 / 查看历史循环</summary><div class="row"><label class="field grow"><span>已有计划</span><select id="cycle-picker"><option value="">新建计划</option></select></label><button id="new-cycle" class="secondary" type="button">新建计划</button></div></details>
+<form id="create-cycle" class="cycle-card"><h2>从 A 的复核中，挑 1～2 条</h2>
+<p id="parent-note" class="helper"></p>
+<label class="field"><span>来源视频 A 的已提交复核</span><select id="source-run" required><option value="">请选择已提交的复核</option></select></label>
+<p id="source-goal" class="helper"></p><div id="suggestions"></div>
+<label class="field"><span>下一条 B 准备拍什么</span><input id="cycle-title" required maxlength="300" placeholder="例如：粒子花教程，开头先展示成品"></label>
+<details class="settings-drawer"><summary>比较设置 · 默认看发布后 24 小时的点赞表现</summary><div class="grid"><label class="field"><span>本轮主要看哪个指标</span><select id="primary-metric"><option value="likes_per_100">每百次播放点赞数</option><option value="plays">播放量</option><option value="likes">点赞量</option><option value="completion_rate">完播率</option><option value="bounce_2s_rate">2秒跳出率</option></select></label><label class="field"><span>期望方向</span><select id="expected-direction"><option value="increase">升高</option><option value="decrease">降低</option></select></label></div>
+<div class="grid"><label class="field"><span>统一观察窗口（发布后小时数）</span><input id="window-hours" type="number" min="1" max="2160" step="0.5" value="24" required></label><label class="field"><span>截图时间容差（分钟）</span><input id="window-tolerance" type="number" min="0" max="60" value="30" required></label></div>
+<p class="helper">例如 A、B 都取发布后 24 小时的累计数据。容差最多 60 分钟且不超过窗口的 10%。保存后冻结本轮口径，不能看完结果再调整标准。</p>
+</details><button class="primary" type="submit">保存计划，准备视频 B</button></form>
+<section id="cycle-detail" hidden>
+<section class="cycle-card"><div class="row"><h2 id="detail-title"></h2><span id="cycle-status" class="badge"></span></div><p id="plan-summary"></p><ol id="planned-items"></ol><a id="cycle-report" target="_blank" rel="noopener">打开创作清单与完整记录 ↗</a><p id="lineage" class="helper"></p></section>
+<section id="b-review-panel" class="cycle-card"><div class="row"><div><h2>把清单用到 B，再复盘这条视频</h2><p id="b-review-status" class="helper">先登记 B，保存下面的采用情况，然后完成 B 的复盘与人工复核。</p></div><button id="open-b-review" type="button" class="primary">登记 / 复盘 B</button></div></section><form id="implementation-form" class="cycle-card"><h2>B 做好后，记录实际用了什么</h2><p class="helper">“已采用”只表示视频里做了这项改动；效果留到后面比较。可以如实记录部分采用或未采用。</p>
+<label class="field"><span>下一条视频 B</span><select id="target-sample" required></select></label><div class="row"><a id="register-b" href="/start" target="_blank" rel="noopener">在这里登记 B</a><button id="refresh-options" class="secondary" type="button">刷新视频和截图记录</button></div>
+<div id="execution-items"></div><button class="primary" type="submit">保存 B 的实际采用记录</button><p class="helper">更换 B 或修改采用记录，会清空本轮当前对比；旧版仍在历史中。</p></form>
+<div id="compare-gate" class="cycle-card" hidden><h2>先完成 B 的人工复核</h2><p>复核完成后，再把 A / B 的数据放在一起看。</p><button id="back-b-review" class="primary" type="button">去复盘 B</button></div><section id="comparison-section" class="cycle-card" hidden><h2>对齐 A / B 的数据，再比较</h2>
+<p id="window-instruction"></p><div class="row"><p class="helper">补充截图并确认保存后，返回本页会自动更新列表。</p><button id="refresh-comparison-records" class="secondary" type="button">刷新已核对截图</button></div><form id="comparison-form"><div class="grid">
+<div><h3 id="label-a">视频 A</h3><label class="field"><span>A 发布时间（北京时间）</span><input id="published-a" type="datetime-local" required></label><label class="field"><span>A 已核对的截图</span><select id="record-a" required></select></label><p id="record-a-info" class="helper"></p><a id="upload-a" target="_blank" rel="noopener">上传 / 核对 A 的截图</a></div>
+<div><h3 id="label-b">视频 B</h3><label class="field"><span>B 发布时间（北京时间）</span><input id="published-b" type="datetime-local" required></label><label class="field"><span>B 已核对的截图</span><select id="record-b" required></select></label><p id="record-b-info" class="helper"></p><a id="upload-b" target="_blank" rel="noopener">上传 / 核对 B 的截图</a></div>
+</div><label class="check"><input id="screenshots-match" type="checkbox" required> 已对照作品确认两张截图分别属于 A、B</label><label class="check"><input id="same-goal" type="checkbox" required> 两条视频希望观众完成的行为一致，所比指标定义一致</label>
+<label class="field"><span>同时发生了哪些其他变化</span><textarea id="confounders" required maxlength="5000" placeholder="如题材、时长、发布时间、配乐、受众、流量激励或投流差异；不知道的请写未知。"></textarea></label><button class="primary" type="submit">检查观察窗口并比较数据</button></form>
+<details id="missing-data"><summary>找不到 A 或 B 在指定时点的数据？</summary><p class="helper">过了采集时点，当前累计值不能还原当时数据。本轮可以留作 B 的基线，下次按计划截取数据。</p><label class="field"><span>缺少什么，下一次怎么采集</span><textarea id="missing-reason" maxlength="5000" placeholder="例如 A 没有发布后 24 小时截图；本轮仅保存 B 的基线，下次两条都在 24 小时截图。"></textarea></label><button id="defer-comparison" class="secondary" type="button">记录缺数据，暂不比较</button></details>
+</section>
+<section id="comparison-result" class="cycle-card" hidden></section>
+<form id="decision-form" class="cycle-card" hidden><h2>每条建议，决定下一步怎么用</h2><p class="helper">这是你的创作决定，不是平台认定改动有效。数据不足时只能选择“暂不能判断”。</p><div id="decision-items"></div><button class="primary" type="submit">保存总结与下一步行动</button></form>
+<section id="next-round" class="cycle-card" hidden><h2>继续下一轮</h2><div id="decisions-summary"></div><p>先复盘 B 并提交人工复核，再从 B 的建议中选择下一轮的 1～2 条。上一轮记录会保留关联。</p><div class="row"><a id="review-b">复盘 B →</a><a id="continue-cycle">从 B 的已提交复核开启下一轮 →</a></div></section>
+</section></main><script defer src="/workspace.js"></script></body></html>

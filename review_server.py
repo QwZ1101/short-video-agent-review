@@ -15,8 +15,10 @@ from improvement_tasks import TaskStore, render_plan
 from workflow_logs import WorkflowLogs, RequestLog
 from workflow_jobs import JobStore
 from screenshot_metrics import ScreenshotStore
+from creation_cycles import CycleStore
 
 STATIC = {"/": "index.html", "/app.js": "app.js", "/tasks.js": "tasks.js", "/style.css": "style.css",
+          "/cycles": "cycles.html", "/cycles.js": "cycles.js", "/workspace.js": "workspace.js", "/embedded.css": "embedded.css", "/cycles.css": "cycles.css",
           "/metrics": "metrics.html", "/metrics.js": "metrics.js", "/metrics.css": "metrics.css",
           "/logs": "logs.html", "/logs.js": "logs.js", "/logs.css": "logs.css",
           "/start": "start.html", "/start.js": "start.js", "/start.css": "start.css"}
@@ -24,7 +26,9 @@ LOGGED_ROUTES = set(STATIC) | {"/api/health", "/api/session", "/api/runs", "/api
     "/api/tasks/report", "/api/report", "/api/evidence", "/api/draft", "/api/submit",
     "/api/tasks/create", "/api/tasks/save", "/api/logs", "/api/logs/run", "/api/logs/requests",
     "/api/samples", "/api/samples/register", "/api/jobs", "/api/jobs/detail", "/api/jobs/plan", "/api/jobs/start",
-    "/api/metrics", "/api/metrics/detail", "/api/metrics/image", "/api/metrics/upload", "/api/metrics/recognize", "/api/metrics/confirm"}
+    "/api/metrics", "/api/metrics/detail", "/api/metrics/image", "/api/metrics/upload", "/api/metrics/recognize", "/api/metrics/confirm",
+    "/api/cycles", "/api/cycles/source", "/api/cycles/sources", "/api/cycles/detail", "/api/cycles/report",
+    "/api/cycles/create", "/api/cycles/implement", "/api/cycles/compare", "/api/cycles/defer", "/api/cycles/decide", "/api/cycles/close"}
 
 
 class ReviewServer(ThreadingHTTPServer):
@@ -33,6 +37,7 @@ class ReviewServer(ThreadingHTTPServer):
         self.tasks = TaskStore(self.store)
         self.jobs = JobStore(workspace)
         self.metrics = ScreenshotStore(workspace)
+        self.cycles = CycleStore(self.store)
         self.token = secrets.token_urlsafe(32)
         super().__init__(("127.0.0.1", port), Handler)
         self.workflow_logs = WorkflowLogs(workspace)
@@ -67,8 +72,8 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("X-Request-ID", self.request_id)
-        # Only the screenshot editor may be embedded by this same local origin.
-        ancestors = "'self'" if urlparse(self.path).path == '/metrics' else "'none'"
+        # Workspace tools can only be embedded by this same local origin.
+        ancestors = "'self'" if urlparse(self.path).path in ('/metrics', '/start', '/') else "'none'"
         self.send_header("Content-Security-Policy", "default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self'; frame-ancestors " + ancestors + "; base-uri 'none'; form-action 'self'")
         self.end_headers()
         try:
@@ -89,10 +94,22 @@ class Handler(BaseHTTPRequestHandler):
         route = urlparse(self.path)
         query = parse_qs(route.query)
         try:
+            if route.path == '/' and 'run' not in query:
+                return self.send((PROJECT_ROOT / 'review-ui/dist/cycles.html').read_bytes(), 'text/html; charset=utf-8')
             if route.path == "/api/health":
                 return self.send({"app": "tutorial-human-review", "workspace": str(self.server.store.workspace)})
             if route.path == "/api/session":
                 return self.send({"token": self.server.token})
+            if route.path == '/api/cycles':
+                return self.send(self.server.cycles.listing())
+            if route.path == '/api/cycles/sources':
+                return self.send(self.server.cycles.sources())
+            if route.path == '/api/cycles/source':
+                return self.send(self.server.cycles.source(query.get('run', [''])[0]))
+            if route.path == '/api/cycles/detail':
+                return self.send(self.server.cycles.load(query.get('id', [''])[0]))
+            if route.path == '/api/cycles/report':
+                return self.send(self.server.cycles.report(query.get('id', [''])[0]).encode('utf-8'), 'text/plain; charset=utf-8')
             if route.path == "/api/metrics":
                 return self.send(self.server.metrics.listing())
             if route.path == "/api/metrics/detail":
@@ -146,6 +163,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.send({"error": "访问校验失败，请刷新页面"}, status=403)
         route = urlparse(self.path)
         if route.path not in ("/api/draft", "/api/submit", "/api/tasks/create", "/api/tasks/save",
+                               "/api/cycles/create", "/api/cycles/implement", "/api/cycles/compare", "/api/cycles/defer", "/api/cycles/decide", "/api/cycles/close",
                                "/api/metrics/upload", "/api/metrics/recognize", "/api/metrics/confirm",
                                "/api/samples/register", "/api/jobs/plan", "/api/jobs/start"):
             return self.send({"error": "接口不存在"}, status=404)
@@ -157,6 +175,9 @@ class Handler(BaseHTTPRequestHandler):
             payload = json.loads(self.rfile.read(size))
             if not isinstance(payload, dict):
                 raise ValueError("请求格式不正确")
+            if route.path.startswith('/api/cycles/'):
+                operation = route.path.rsplit('/', 1)[1]
+                return self.send(getattr(self.server.cycles, operation)(payload))
             if route.path == '/api/metrics/upload':
                 return self.send(self.server.metrics.upload(payload))
             if route.path == '/api/metrics/recognize':

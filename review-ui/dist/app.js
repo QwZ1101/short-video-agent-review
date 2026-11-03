@@ -142,6 +142,8 @@ async function loadRun(identifier,selectedIndex=0){
     $('report').hidden=!feedback.revision;$('report').href='/api/report?run='+encodeURIComponent(data.id);
     tabs();renderCard();renderEvidenceOptions();$('workspace').hidden=false;
     $('workspace-views').hidden=!locked();
+    $('partial-cycle').hidden=restored||feedback.status!=='needs_evidence'||!feedback.findings.some(f=>['accept','revise'].includes(f.decision));
+    $('partial-cycle-link').href='/cycles?run='+encodeURIComponent(data.id);
     showView(locked()?'tasks':'review');
     await window.TaskBoard.load(data.id,locked());
     if(locked())message(feedback.provenance?.actor==='assistant_on_user_request'?'本轮由助手按你的授权整理并提交，历史记录已保留。接下来可以记录修改进度与实际验证结果。':'本轮复核已提交，可以继续跟踪修改与验证。');

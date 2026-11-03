@@ -18,9 +18,11 @@ window.TaskBoard=(()=>{
   function validationVisibility(){get('task-validation').hidden=!['ready_for_validation','validated','needs_revision'].includes(draft.status);}
   function render(){
     const board=get('task-board');board.replaceChildren();if(!plan)return;
+    const next=node('section',undefined,'task-source');next.append(node('h2','想把经验用到下一条视频？'),node('p','先挑 1～2 条建议，写成下一条的创作清单。关联视频 B 后记录采用情况，再按相同观察窗口比较数据。'));
+    const nextLink=node('a','选择建议，制定下一条计划 →');nextLink.href='/cycles?run='+encodeURIComponent(run);next.append(nextLink);board.append(next);
     const total=plan.tasks.length,done=plan.tasks.filter(t=>t.status==='validated').length;
-    const head=node('div',undefined,'section-head');head.append(node('h2','把建议落实到下一版'),node('span',`验证通过 ${done} / ${total} · 来源复核第 ${plan.source_feedback_revision} 版`));board.append(head);
-    board.append(node('p','任务按已提交建议直接生成。先完成修改，再记录具体版本的测试；通过只代表这次记录的测试结果。','helper'));
+    const head=node('div',undefined,'section-head');head.append(node('h2','本视频的修改记录'),node('span',`验证通过 ${done} / ${total} · 来源复核第 ${plan.source_feedback_revision} 版`));board.append(head);
+    board.append(node('p','下面用于继续修改当前视频。认可的建议不会自动计入下一条计划；验证通过也不等于播放或互动提升。','helper'));
     if(!plan.revision){const create=node('button','生成修改任务','primary');create.onclick=()=>save(true);create.disabled=busy;board.append(create);return;}
     const nav=node('nav',undefined,'task-tabs');nav.setAttribute('aria-label','修改任务');
     plan.tasks.forEach((task,i)=>{const b=node('button',`${i+1} · ${names[task.status]}`,i===index?'selected':'');b.setAttribute('aria-pressed',String(i===index));b.onclick=()=>{if(changed&&!confirm('当前任务有未保存的记录，确定切换吗？'))return;index=i;pick();notify('');render();};nav.append(b);});board.append(nav);

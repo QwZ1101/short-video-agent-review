@@ -109,6 +109,7 @@ class ScreenshotTests(unittest.TestCase):
         editor = opener.open(base+'/metrics?embed=1')
         self.assertEqual(editor.status,200)
         self.assertIn("frame-ancestors 'self'", editor.headers['Content-Security-Policy'])
-        self.assertIn("frame-ancestors 'none'", opener.open(base+'/start').headers['Content-Security-Policy'])
+        self.assertIn("frame-ancestors 'self'", opener.open(base+'/start').headers['Content-Security-Policy'])
+        self.assertIn("frame-ancestors 'none'", opener.open(base+'/cycles').headers['Content-Security-Policy'])
         result=json.load(opener.open(urllib.request.Request(base+'/api/metrics/confirm',data=body,headers={'Content-Type':'application/json','X-Review-Token':server.token})))
         self.assertEqual(result['status'],'confirmed')
