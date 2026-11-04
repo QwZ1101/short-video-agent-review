@@ -46,3 +46,10 @@ B 在计划登记前已发布时，比较结果标为回顾性，不冒充预先
 ## 验证范围
 
 新增测试覆盖少量选择、来源冻结、实际采用与效果分离、时长及口径拦截、零与缺失值、百分点与相对变化、缺基线结案、父子计划归属、修订失效、来源篡改和 HTTP 访问校验。合成数据和浏览器验收不代表真实视频已产生效果提升。
+# Published-video workflow (2026-11-04)
+
+Submitted reviews now lead directly to selecting one or two recommendations for the next video. The current-video revision form is removed from the review UI. Historical task records remain available through their existing storage and APIs.
+
+When a review is embedded in the workspace, its next-plan link navigates the outer workspace to `/cycles?run=...`. Material and review tools continue to open within the workspace. The cycle page retains its frame restriction.
+
+Browser acceptance uses `tests/serve_cycle_fixture.py <absolute-state-file>` to create a separate synthetic workspace without model calls. Acceptance covers the embedded review link, suggestion selection, plan creation, B implementation, B human review, matched-window comparison, decision, next-cycle lineage and closing an unfinished cycle. Synthetic metrics must not be represented as real creator outcomes.

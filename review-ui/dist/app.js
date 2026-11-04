@@ -1,6 +1,6 @@
 'use strict';
 const $ = id => document.getElementById(id);
-const labels = {observation:'观察到的情况', interpretation:'可能的影响', suggestion:'建议怎么改', validation_plan:'如何验证效果'};
+const labels = {observation:'观察到的情况', interpretation:'可能的影响', suggestion:'下一条建议怎么做', validation_plan:'下一条如何观察效果'};
 const decisions = {pending:'待复核',accept:'保留候选稿',revise:'修改后采用',unsure:'暂不确定'};
 const statuses = {awaiting_human_review:'等待人工复核',human_reviewed:'人工复核已提交'};
 let data, feedback, selected=0, token='', dirty=false, busy=false;
@@ -146,7 +146,7 @@ async function loadRun(identifier,selectedIndex=0){
     $('partial-cycle-link').href='/cycles?run='+encodeURIComponent(data.id);
     showView(locked()?'tasks':'review');
     await window.TaskBoard.load(data.id,locked());
-    if(locked())message(feedback.provenance?.actor==='assistant_on_user_request'?'本轮由助手按你的授权整理并提交，历史记录已保留。接下来可以记录修改进度与实际验证结果。':'本轮复核已提交，可以继续跟踪修改与验证。');
+    if(locked())message(feedback.provenance?.actor==='assistant_on_user_request'?'本轮由助手按你的授权整理并提交，历史记录已保留。接下来挑选建议，用于下一条视频。':'本轮复核已提交，接下来挑选建议，用于下一条视频。');
     if(feedback.status==='needs_evidence')message('已记录不确定项，流程仍等待补证。补齐材料后可继续修改并提交。');
     if(data.refinement?.stop_reason&&!locked())message('返修已停止：'+data.refinement.stop_reason);
     if(data.goal_changed)message('当前目标：索要展示网页链接，或者点赞。下面保留旧目标的结果，不代表新目标复盘已完成。');
