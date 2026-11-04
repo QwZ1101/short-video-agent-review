@@ -109,16 +109,34 @@ def build_request(bundle, images, model, system_prompt=None):
         content.extend([{"type": "text", "text": "下一张图片对应证据 ID：" + item["id"]},
                         {"type": "image_url", "image_url": {"url": "data:%s;base64,%s" % (
                             item["mime"], base64.b64encode(item["raw"]).decode("ascii"))}}])
+    if system_prompt is None:
+        system_prompt = (PROJECT_ROOT / "prompts/tutorial_review.md").read_text(encoding="utf-8")
+        system_prompt += '\n本次完整报告的 sample_id 必须原样填写：' + json.dumps(bundle['task']['sample_id'], ensure_ascii=False)
+        system_prompt += '\n返回前检查：最外层是对象，包含 sample_id、summary、findings、limitations；建议数组只能放在 findings 内，不能单独返回数组。'
     return {"model": model, "enable_thinking": False, "stream": True, "stream_options": {"include_usage": True}, "max_tokens": 5000,
             "response_format": {"type": "json_object"}, "messages": [
-                {"role": "system", "content": system_prompt if system_prompt is not None else (PROJECT_ROOT / "prompts/tutorial_review.md").read_text(encoding="utf-8")},
+                {"role": "system", "content": system_prompt},
                 {"role": "user", "content": content}]}
+
+
+class ReviewFormatError(ValueError):
+    """The response arrived, but its report envelope is missing or belongs to another sample."""
+
+    def __init__(self, message, kind):
+        super().__init__(message)
+        self.kind = kind
 
 
 def validate_review(review, bundle):
     """只验证结构与引用存在性；不将其等同于事实正确性。"""
-    if not isinstance(review, dict) or review.get("sample_id") != bundle["task"]["sample_id"]:
-        raise ValueError("模型输出的样本 ID 不匹配")
+    if not isinstance(review, dict):
+        detail = '只返回了建议列表' if isinstance(review, list) else '未返回完整报告对象'
+        raise ReviewFormatError('模型返回格式不完整：' + detail + '；需要包含 sample_id、summary、findings、limitations 的 JSON 对象。已保留原始回答，未自动重试。', 'invalid_report_envelope')
+    missing = [key for key in ('sample_id', 'summary', 'findings', 'limitations') if key not in review]
+    if missing:
+        raise ReviewFormatError('模型报告缺少必要字段：' + '、'.join(missing) + '。已保留原始回答，未自动补造内容。', 'missing_report_fields')
+    if review.get("sample_id") != bundle["task"]["sample_id"]:
+        raise ReviewFormatError("模型输出的样本 ID 不匹配，已停止使用该报告", 'sample_id_mismatch')
     def require_text(value, label):
         if not isinstance(value, str) or not value.strip():
             raise ValueError(label + " 必须是非空文本")
@@ -330,6 +348,8 @@ def main():
         message = str(error)
         if run_dir:
             metadata.update(status="failed", error=message)
+            if isinstance(error, ReviewFormatError):
+                metadata['error_kind'] = error.kind
             if started is not None:
                 metadata["elapsed_seconds"] = round(time.monotonic() - started, 2)
             if isinstance(error, ModelNetworkError):

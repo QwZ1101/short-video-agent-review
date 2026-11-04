@@ -7,7 +7,7 @@ import unittest
 import zipfile
 from unittest.mock import patch
 
-from review_tutorial import ModelNetworkError, build_evidence, call_dashscope, read_zip_description, select_frames, validate_review
+from review_tutorial import ModelNetworkError, ReviewFormatError, build_request, build_evidence, call_dashscope, read_zip_description, select_frames, validate_review
 from review_tutorial import main as review_main
 
 
@@ -20,6 +20,44 @@ class ReviewTests(unittest.TestCase):
 
     def test_valid_review(self):
         validate_review(self.review, self.bundle)
+
+    def test_list_response_is_format_error_not_sample_mismatch(self):
+        with self.assertRaises(ReviewFormatError) as caught:
+            validate_review(self.review['findings'], self.bundle)
+        self.assertEqual(caught.exception.kind, 'invalid_report_envelope')
+        self.assertNotIn('ID 不匹配', str(caught.exception))
+
+    def test_missing_envelope_fields_are_reported_without_fabrication(self):
+        incomplete = {'findings': self.review['findings']}
+        with self.assertRaises(ReviewFormatError) as caught:
+            validate_review(incomplete, self.bundle)
+        self.assertEqual(caught.exception.kind, 'missing_report_fields')
+        self.assertEqual(set(incomplete), {'findings'})
+
+    def test_default_prompt_binds_report_id_without_changing_other_agents(self):
+        payload = build_request(self.bundle, [], 'fixture')
+        self.assertIn('"example"', payload['messages'][0]['content'])
+        self.assertIn('不能单独返回数组', payload['messages'][0]['content'])
+        # Screenshot OCR / verifier / reviser use their own schemas and prompts.
+        custom = build_request({'catalog': {}}, [], 'fixture', system_prompt='custom contract')
+        self.assertEqual(custom['messages'][0]['content'], 'custom contract')
+
+    def test_complete_but_malformed_response_is_retained_without_retry(self):
+        with tempfile.TemporaryDirectory() as directory:
+            self.bundle['coverage'] = {'image_count': 0}
+            raw = json.dumps(self.review['findings'])
+            response = {'choices': [{'message': {'content': raw}, 'finish_reason': 'stop'}]}
+            with patch('sys.argv', ['review_tutorial.py', '--video-evidence', 'fixture.json', '--output-dir', directory]), \
+                 patch('review_tutorial.load_sample', return_value={}), \
+                 patch('review_tutorial.build_evidence', return_value=(self.bundle, [])), \
+                 patch('review_tutorial.call_dashscope', return_value=response) as model:
+                self.assertEqual(review_main(), 1)
+            run = next(Path(directory).glob('run-*'))
+            metadata = json.loads((run / 'run.json').read_text(encoding='utf-8'))
+            self.assertEqual(metadata['error_kind'], 'invalid_report_envelope')
+            self.assertEqual((run / 'model-output.txt').read_text(encoding='utf-8'), raw)
+            self.assertFalse((run / 'review.json').exists())
+            model.assert_called_once()
 
     def test_disconnect_is_reported_as_network_error_without_retry(self):
         with patch.dict("os.environ", {"DASHSCOPE_API_KEY": "test-placeholder", "DASHSCOPE_BASE_URL": "https://dashscope.aliyuncs.com/compatible-mode/v1"}):
