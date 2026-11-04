@@ -15,6 +15,7 @@ test('cycle links leave embedded review while material tools stay embedded',()=>
   click('http://127.0.0.1:19433/cycles?run=run-test');
   assert.equal(assigned,'http://127.0.0.1:19433/cycles?run=run-test');assert.equal(frame.src,undefined);assert.ok(prevented);
   click('http://127.0.0.1:19433/metrics?sample=test');assert.equal(frame.src,'http://127.0.0.1:19433/metrics?sample=test');
+  click('http://127.0.0.1:19433/logs?run=run-test');assert.equal(frame.src,'http://127.0.0.1:19433/logs?run=run-test');
   click('https://external.test/');assert.equal(prevented,false);
 });
 test('saving a first plan refreshes step availability after releasing busy controls',async()=>{

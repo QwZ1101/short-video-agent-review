@@ -105,9 +105,24 @@ class LogTests(unittest.TestCase):
             self.assertTrue(response.headers["X-Request-ID"])
             self.assertEqual(json.load(response)["status"], "failed")
         with opener.open(url + "/logs") as response:
+            self.assertIn("frame-ancestors 'self'", response.headers['Content-Security-Policy'])
             self.assertIn("运行日志", response.read().decode("utf-8"))
+        with opener.open(url + '/cycles') as response:
+            self.assertIn("frame-ancestors 'none'", response.headers['Content-Security-Policy'])
         self.assertNotIn("secret-example", server.request_log.path.read_text(encoding="utf-8"))
         with self.assertRaises(urllib.error.HTTPError):
             opener.open(urllib.request.Request(url + "/api/logs", headers={"Host": "evil.test"}))
         with opener.open(url + "/api/logs/requests") as response:
             self.assertTrue(json.load(response)["requests"])
+
+    def test_failed_stage_diagnostic_is_loaded_with_redaction(self):
+        folder = self.run / 'analysis/run-fixture'
+        folder.mkdir(parents=True)
+        (folder/'run.json').write_text(json.dumps(dict(error='connection interrupted; token=secret-example',
+            error_kind='network_or_incomplete_stream',elapsed_seconds=31.2,
+            transport={'error_type':'RemoteDisconnected','private':'must-not-expose'})),encoding='utf-8')
+        result = WorkflowLogs(self.root).detail('run-test')
+        self.assertEqual(result['diagnostics'][0]['elapsed_seconds'],'31.2')
+        self.assertEqual(result['diagnostics'][0]['error_type'],'RemoteDisconnected')
+        self.assertNotIn('secret-example',json.dumps(result))
+        self.assertNotIn('must-not-expose',json.dumps(result))

@@ -40,7 +40,7 @@ $('work-frame').onload=()=>{
   const form=doc.querySelector('#register-form');if(form){const details=doc.createElement('details'),summary=doc.createElement('summary');summary.textContent='更多设置：字幕、受众与编号';details.append(summary);for(const name of ['sample_id','transcript','audience','prior_knowledge']){const label=form.querySelector(`[name="${name}"]`)?.closest('label');if(label)details.append(label);}form.insertBefore(details,form.querySelector('button'));}
   doc.addEventListener('click',e=>{const a=e.target.closest('a');if(!a)return;const u=new URL(a.href,location.origin);if(u.origin!==location.origin)return;
     if(u.pathname==='/cycles'){e.preventDefault();location.assign(u.href);return;}
-    if(['/','/start','/metrics'].includes(u.pathname)){e.preventDefault();$('work-frame').src=u.href;}});
+    if(['/','/start','/metrics','/logs'].includes(u.pathname)){e.preventDefault();$('work-frame').src=u.href;}});
   // Registration is already explicit; return the registered choice without another dropdown selection.
 };
 $('open-a').onclick=()=>openWork('/start'+(parent?.target?'?sample='+encodeURIComponent(parent.target.sample_id):''),'复盘视频 A');

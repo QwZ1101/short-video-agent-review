@@ -63,8 +63,11 @@ class ReviewTests(unittest.TestCase):
         with patch.dict("os.environ", {"DASHSCOPE_API_KEY": "test-placeholder", "DASHSCOPE_BASE_URL": "https://dashscope.aliyuncs.com/compatible-mode/v1"}):
             with patch("review_tutorial.urllib.request.build_opener") as builder:
                 builder.return_value.open.side_effect = http.client.RemoteDisconnected("closed")
-                with self.assertRaisesRegex(ModelNetworkError, "响应前中断"):
+                with self.assertRaisesRegex(ModelNetworkError, "响应前中断") as caught:
                     call_dashscope({"model": "test-model"})
+                self.assertEqual(caught.exception.transport['error_type'], 'RemoteDisconnected')
+                self.assertEqual(caught.exception.transport['failure_phase'], 'awaiting_response')
+                self.assertNotIn('test-placeholder', json.dumps(caught.exception.transport))
                 builder.return_value.open.assert_called_once()
 
     def test_rejects_invented_reference(self):

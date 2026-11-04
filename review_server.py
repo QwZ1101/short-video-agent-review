@@ -73,7 +73,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("X-Request-ID", self.request_id)
         # Workspace tools can only be embedded by this same local origin.
-        ancestors = "'self'" if urlparse(self.path).path in ('/metrics', '/start', '/') else "'none'"
+        ancestors = "'self'" if urlparse(self.path).path in ('/metrics', '/start', '/logs', '/') else "'none'"
         self.send_header("Content-Security-Policy", "default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self'; frame-ancestors " + ancestors + "; base-uri 'none'; form-action 'self'")
         self.end_headers()
         try:

@@ -263,8 +263,12 @@ def call_dashscope(payload):
     except urllib.error.HTTPError as error:
         # 不回显服务端原始错误体，防止其中包含请求材料或凭证。
         raise ValueError("DashScope HTTP %s；请核对模型权限、地域和额度。本次不自动重试。" % error.code) from None
-    except (urllib.error.URLError, TimeoutError, ConnectionError, http.client.RemoteDisconnected):
-        raise ModelNetworkError("DashScope 连接失败、超时或在返回响应前中断；未取得有效模型回答，本次不自动重试。") from None
+    except (urllib.error.URLError, TimeoutError, ConnectionError, http.client.RemoteDisconnected) as error:
+        transport = {'failure_phase': 'awaiting_response', 'error_type': type(error).__name__,
+                     'request_bytes': len(body)}
+        if isinstance(error, urllib.error.URLError):
+            transport['cause_type'] = type(error.reason).__name__
+        raise ModelNetworkError("DashScope 连接失败、超时或在返回响应前中断；未取得有效模型回答，本次不自动重试。", transport=transport) from None
 
 
 def render_report(review, bundle, metadata):

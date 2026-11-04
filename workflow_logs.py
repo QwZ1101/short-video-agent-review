@@ -110,6 +110,24 @@ class WorkflowLogs:
                     for s in state.get("stages", [])[:30] if isinstance(s, dict)],
             events=[{k: redact(row.get(k)) for k in ("time", "event", "stage", "error", "reason")} for row in rows],
             invalid_event_lines=invalid, events_truncated=truncated)
+        result['diagnostics'] = []
+        for stage in state.get('stages', [])[:30]:
+            if not isinstance(stage, dict) or stage.get('status') != 'failed' or stage.get('id') not in ('analysis','verification','repair-1','repair-2','reverify-1','reverify-2'):
+                continue
+            for path in sorted((directory / stage['id']).glob('run-*/run.json'), reverse=True)[:4]:
+                if directory.resolve() not in path.resolve().parents:
+                    continue
+                try:
+                    meta = read_state(path)
+                except (OSError, ValueError, TypeError):
+                    continue
+                if meta.get('error'):
+                    transport = meta.get('transport') if isinstance(meta.get('transport'), dict) else {}
+                    result['diagnostics'].append({k: redact(v) for k,v in dict(
+                        stage=stage['id'],error=meta['error'],error_kind=meta.get('error_kind'),
+                        elapsed_seconds=meta.get('elapsed_seconds'),
+                        error_type=transport.get('error_type')).items()})
+                    break
         plan = state.get("plan")
         if isinstance(plan, dict) and isinstance(plan.get("tasks"), list):
             result["plan"] = {"planner": redact(plan.get("planner"), 60),
