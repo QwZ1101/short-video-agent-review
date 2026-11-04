@@ -28,7 +28,22 @@ async function saveMaterials(){
 }
 $('register-form').onsubmit=e=>{e.preventDefault();saveMaterials().catch(e=>message(e.message));};
 $('save-materials').onclick=async()=>{$('save-materials').disabled=true;try{await saveMaterials();message('作品材料已保存，可以预览复盘计划。');}catch(e){message(e.message);}finally{$('save-materials').disabled=false;}};
-$('plan').onclick=async()=>{if(planning||launching)return;try{await saveMaterials();}catch(e){message(e.message);return;}if($('metrics-record').value&&!$('metrics-match').checked){message('请先确认截图属于所选视频。');return;}planning=true;$('plan').disabled=true;message('');const version=++requestVersion;planned=null;$('start-actions').hidden=true;try{const rounds=Number($('budget').value);const data=await api('/api/jobs/plan',{sample_id:$('samples').value,max_model_calls:2+2*rounds,max_repair_rounds:rounds,metrics_record_id:$('metrics-record').value,metrics_match_confirmed:$('metrics-match').checked});if(version!==requestVersion)return;planned=data;showPlan(data);await refreshJobs(data.id);}catch(error){message(error.message);}finally{planning=false;$('plan').disabled=!samples.length;}};
+$('plan').onclick=async()=>{
+  if(planning||launching)return;
+  planning=true;$('plan').disabled=true;$('plan').textContent='正在检查材料…';
+  $('plan-status').textContent='正在保存并核对作品材料…';message('');planned=null;$('start-actions').hidden=true;
+  try{
+    const saved=await saveMaterials();
+    if(saved.sample_id!==$('samples').value||saved.metrics_record_id!==$('metrics-record').value)throw new Error('作品选择已变化，请重新点击预览。');
+    const version=++requestVersion,rounds=Number($('budget').value);
+    $('plan-status').textContent='材料已保存，正在生成复盘计划…';
+    const data=await api('/api/jobs/plan',{sample_id:saved.sample_id,max_model_calls:2+2*rounds,max_repair_rounds:rounds,metrics_record_id:saved.metrics_record_id,metrics_match_confirmed:$('metrics-match').checked});
+    if(version!==requestVersion){$('plan-status').textContent='选择已变化，请重新点击预览。';return;}
+    planned=data;showPlan(data);$('plan-status').textContent=data.ready?'计划已准备好，可点击“启动本轮复盘”。':'材料检查已完成，请按右侧提示补全后重新预览。';
+    try{await refreshJobs(data.id);}catch(error){$('plan-status').textContent+=' 运行记录刷新失败：'+error.message;}
+  }catch(error){$('plan-status').textContent='预览未完成：'+error.message;message(error.message);}
+  finally{planning=false;$('plan').disabled=false;$('plan').textContent='检查材料并预览计划';}
+};
 $('start').onclick=async()=>{if(!planned||launching)return;launching=true;$('start').disabled=true;$('plan').disabled=true;message('');const job=planned;try{const data=await api('/api/jobs/start',{job_id:job.id});$('start-actions').hidden=true;planned=null;await refreshJobs(data.id);message('启动请求已处理。刷新或重复提交同一请求不会增加运行次数。');}catch(error){message(error.message+' 可以刷新记录检查状态；不会自动重试。');}finally{launching=false;$('plan').disabled=!samples.length;if(planned)$('start').disabled=!planned.ready;}};
 $('jobs').onchange=()=>chooseJob($('jobs').value);
 $('refresh').onclick=async()=>{try{await refreshJobs();}catch(error){message(error.message);}};

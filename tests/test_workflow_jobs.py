@@ -108,6 +108,37 @@ class WebJobTests(unittest.TestCase):
             metrics_record_id=new['id'],match_confirmed=True))
         self.assertEqual(binding['published_at'],'2026-10-07T14:37:00+08:00')
         self.assertEqual(screenshots.for_workflow(new['id'],'test-video',True)['published_at'],binding['published_at'])
+        # Exercise the consumer too: optional publication metadata must survive planning,
+        # model evidence construction and the launch preflight, not only screenshot storage.
+        from review_tutorial import build_evidence
+        with patch('review_tutorial.call_dashscope', side_effect=AssertionError('no model call')):
+            job = self.plan()
+            self.assertTrue(job['ready'])
+            self.assertEqual(job['plan']['platform_data']['source']['published_at'], binding['published_at'])
+            sample = read(self.store.root(job['id']) / 'sample.json')
+            evidence = self.root / 'evidence.json'
+            (self.root / 'frame.jpg').write_bytes(b'frame fixture')
+            atomic_json(evidence, dict(sample_id='test-video', source_video=str(self.video), timestamp_kind='requested',
+                frames=[dict(id='frame-1', image_path='frame.jpg', requested_time_seconds=0)], subtitles=[]))
+            bundle, _ = build_evidence(sample, evidence)
+            self.assertEqual(bundle['catalog']['metrics-calculated']['source']['published_at'], binding['published_at'])
+            self.assertEqual(self.launch_fake(job['id'])[1].call_count, 1)
+
+    def test_calculator_accepts_only_valid_optional_publication_metadata(self):
+        from platform_metrics import calculate_metrics
+        screenshots, identifier = self.screenshot(scope='unknown', sample_id='test-video')
+        original = screenshots.for_workflow(identifier, 'test-video', True)
+        self.assertEqual(calculate_metrics(original)['status'], 'completed')
+        valid = dict(original, published_at='2026-10-07T14:37:00+08:00')
+        result = calculate_metrics(valid)
+        self.assertEqual(result['source'], valid)
+        self.assertEqual(result['calculations'], [])  # Unknown scope still prevents ratios.
+        self.assertFalse(any('未提供发布时间' in text for text in result['limitations']))
+        for value in (None, '', 'wrong', '2026-10-07T14:37:00', '2026-11-02T00:00:00+08:00'):
+            with self.subTest(value=value), self.assertRaisesRegex(ValueError, '发布时间'):
+                calculate_metrics(dict(original, published_at=value))
+        with self.assertRaises(ValueError):
+            calculate_metrics(dict(valid, arbitrary_field='not supported'))
 
     def test_screenshot_human_gate_mismatch_and_tampering(self):
         screenshot, identifier = self.screenshot(sample_id='test-video')

@@ -59,7 +59,8 @@ def calculate_screenshot(raw):
     counts = {'plays': '播放', 'likes': '点赞', 'comments': '评论', 'shares': '分享',
               'favorites': '收藏', 'danmaku': '弹幕'}
     rates = {'completion_rate': '完播率', 'bounce_2s_rate': '2秒跳出率'}
-    if set(raw) != {'schema_version', 'source', 'observed_at', 'scope', 'note', 'metrics', 'approximate_fields'}:
+    required = {'schema_version', 'source', 'observed_at', 'scope', 'note', 'metrics', 'approximate_fields'}
+    if not required <= set(raw) or set(raw) - required - {'published_at'}:
         raise ValueError('截图平台数据字段不完整')
     if not isinstance(raw['source'], dict) or set(raw['source']) != {'record_id', 'sha256', 'confirmed_at', 'title', 'sample_id'}:
         raise ValueError('截图平台数据缺少来源')
@@ -70,6 +71,13 @@ def calculate_screenshot(raw):
             raise ValueError()
     except (TypeError, ValueError):
         raise ValueError('截图统计时间无效') from None
+    if 'published_at' in raw:
+        try:
+            published = datetime.fromisoformat(raw['published_at'])
+            if published.tzinfo is None or published > datetime.fromisoformat(raw['observed_at']):
+                raise ValueError()
+        except (TypeError, ValueError):
+            raise ValueError('截图发布时间无效或晚于统计时间') from None
     if raw['scope'] not in ('unknown', 'cumulative', 'period') or not isinstance(raw['note'], str):
         raise ValueError('截图统计范围无效')
     if raw['scope'] == 'period' and not raw['note'].strip():
@@ -89,6 +97,7 @@ def calculate_screenshot(raw):
     if not isinstance(raw['approximate_fields'], list) or any(k not in counts for k in raw['approximate_fields']):
         raise ValueError('截图精度标记无效')
     limitations = list(LIMITATIONS) + ['截图未记录索要链接人数；评论量不能代替索要链接人数。',
+        '已保存核对后的发布时间；跨视频比较仍需确认统计口径和观察窗口一致。' if 'published_at' in raw else
         '未提供发布时间，不推算发布后经过小时数；不能据此进行同发布时长的跨视频比较。']
     calculations = []
     plays = values['plays']
