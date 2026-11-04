@@ -216,7 +216,7 @@ class CycleStore:
             r = self.current(payload)
             sample_id = payload.get('sample_id')
             if sample_id == r['source']['sample_id']:
-                raise ValueError('这里记录下一条新视频 B；重剪 A 请使用原有本视频修改记录')
+                raise ValueError('这里记录下一条新视频 B，请选择不同于 A 的作品')
             path = self.jobs.sample_path(sample_id)
             sample = read_json(path)
             executions = payload.get('executions')
@@ -230,7 +230,7 @@ class CycleStore:
                     raise ValueError('采用情况格式无效')
                 seen.add(fid)
                 clean.append(dict(finding_id=fid, status=item['status'], note=text(item.get('note'), '实际做法或未采用原因'),
-                                  evidence=text(item.get('evidence'), 'B 中对应的时间位置或作品版本', required=item['status'] != 'not_applied')))
+                                  evidence=text(item.get('evidence',''), '历史作品位置说明', required=False)))
             r['target'] = dict(sample_id=sample_id, goal=sample.get('tutorial_goal'), sample_sha256=digest(path),
                                executions=clean, recorded_at=now())
             r.update(comparison=None, decisions=[], status='implemented')
