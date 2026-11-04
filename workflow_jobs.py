@@ -117,6 +117,41 @@ class JobStore:
         path = create_sample(root=self.workspace, **payload)
         return {"sample_id": path.stem}
 
+    def materials(self, identifier, payload=None):
+        """Persistent work-to-screenshot selection without rewriting historical sample configs."""
+        from screenshot_metrics import ScreenshotStore, LOCK
+        with LOCK:
+            sample_path = self.sample_path(identifier)
+            if not sample_path.is_file():
+                raise ValueError('请先填写并保存视频材料')
+            folder = self.workspace / 'reports/work-materials' / identifier
+            path = folder / 'materials.json'
+            previous = read(path) if path.exists() else dict(sample_id=identifier, revision=0, metrics_record_id='')
+            if path.exists():
+                revision = previous.get('revision')
+                if type(revision) is not int or revision < 1 or read(folder / ('revision-%04d.json' % revision)) != previous:
+                    raise ValueError('作品材料与保存历史不一致，请检查记录')
+            if payload is None:
+                if previous.get('metrics_record_id'):
+                    ScreenshotStore(self.workspace).for_workflow(previous['metrics_record_id'], identifier, True)
+                return previous
+            if set(payload) != {'sample_id', 'revision', 'metrics_record_id', 'match_confirmed'} or payload['revision'] != previous['revision']:
+                raise ValueError('材料记录已变化，请刷新后再保存')
+            metric = payload['metrics_record_id']
+            published = None
+            if metric:
+                snapshot = ScreenshotStore(self.workspace).for_workflow(metric, identifier, payload['match_confirmed'])
+                published = snapshot.get('published_at')
+            elif not isinstance(metric, str):
+                raise ValueError('截图编号无效')
+            record = dict(sample_id=identifier, revision=previous['revision']+1, metrics_record_id=metric,
+                published_at=published, saved_at=now(), sample_sha256=digest(sample_path))
+            folder.mkdir(parents=True, exist_ok=True)
+            atomic_json(folder / ('revision-%04d.json' % record['revision']), record)
+            atomic_json(path, record)
+            event(folder, 'work_materials_saved', revision=record['revision'], has_screenshot=bool(metric))
+            return record
+
     def inputs(self, identifier):
         path = self.sample_path(identifier)
         if path.stat().st_size > 256 * 1024:
@@ -159,6 +194,9 @@ class JobStore:
         if type(rounds) is not int or rounds not in (0, 1, 2) or type(budget) is not int or budget != 2 + 2 * rounds:
             raise ValueError("网页预算需为 2 / 4 / 6 次，分别对应 0 / 1 / 2 轮可选返修")
         sample, fingerprint = self.inputs(payload["sample_id"])
+        if 'metrics_record_id' not in payload:
+            binding = self.materials(payload['sample_id'])
+            payload = dict(payload, metrics_record_id=binding['metrics_record_id'], metrics_match_confirmed=bool(binding['metrics_record_id']))
         self.attach_metrics(sample, fingerprint, payload)
         blockers, warnings = self.preflight(sample)
         plan = build_plan(sample, budget)

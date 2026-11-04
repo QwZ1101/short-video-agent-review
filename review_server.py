@@ -25,7 +25,7 @@ STATIC = {"/": "index.html", "/app.js": "app.js", "/tasks.js": "tasks.js", "/sty
 LOGGED_ROUTES = set(STATIC) | {"/api/health", "/api/session", "/api/runs", "/api/review", "/api/tasks",
     "/api/tasks/report", "/api/report", "/api/evidence", "/api/draft", "/api/submit",
     "/api/tasks/create", "/api/tasks/save", "/api/logs", "/api/logs/run", "/api/logs/requests",
-    "/api/samples", "/api/samples/register", "/api/jobs", "/api/jobs/detail", "/api/jobs/plan", "/api/jobs/start",
+    "/api/samples", "/api/samples/register", "/api/samples/materials", "/api/jobs", "/api/jobs/detail", "/api/jobs/plan", "/api/jobs/start",
     "/api/metrics", "/api/metrics/detail", "/api/metrics/image", "/api/metrics/upload", "/api/metrics/recognize", "/api/metrics/confirm",
     "/api/cycles", "/api/cycles/source", "/api/cycles/sources", "/api/cycles/detail", "/api/cycles/report",
     "/api/cycles/create", "/api/cycles/implement", "/api/cycles/compare", "/api/cycles/defer", "/api/cycles/decide", "/api/cycles/close"}
@@ -121,6 +121,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(self.server.store.list_runs())
             if route.path == "/api/samples":
                 return self.send(self.server.jobs.samples())
+            if route.path == '/api/samples/materials':
+                return self.send(self.server.jobs.materials(query.get('sample', [''])[0]))
             if route.path == "/api/jobs":
                 return self.send(self.server.jobs.jobs())
             if route.path == "/api/jobs/detail":
@@ -165,7 +167,7 @@ class Handler(BaseHTTPRequestHandler):
         if route.path not in ("/api/draft", "/api/submit", "/api/tasks/create", "/api/tasks/save",
                                "/api/cycles/create", "/api/cycles/implement", "/api/cycles/compare", "/api/cycles/defer", "/api/cycles/decide", "/api/cycles/close",
                                "/api/metrics/upload", "/api/metrics/recognize", "/api/metrics/confirm",
-                               "/api/samples/register", "/api/jobs/plan", "/api/jobs/start"):
+                               "/api/samples/register", "/api/samples/materials", "/api/jobs/plan", "/api/jobs/start"):
             return self.send({"error": "接口不存在"}, status=404)
         try:
             size = int(self.headers.get("Content-Length", "0"))
@@ -190,6 +192,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(self.server.metrics.confirm(payload['id'], payload['confirmation']))
             if route.path == "/api/samples/register":
                 return self.send(self.server.jobs.register(payload))
+            if route.path == '/api/samples/materials':
+                return self.send(self.server.jobs.materials(payload.get('sample_id'), payload))
             if route.path == "/api/jobs/plan":
                 return self.send(self.server.jobs.plan(payload))
             if route.path == "/api/jobs/start":

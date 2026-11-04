@@ -137,10 +137,13 @@ class ScreenshotStore:
         normalized = {k: number(v, k in RATES) for k, v in c['metrics'].items()}
         if normalized != c['normalized']:
             raise ValueError('截图确认数据不一致')
-        return dict(schema_version=2, source=dict(record_id=identifier, sha256=state['sha256'],
+        result = dict(schema_version=2, source=dict(record_id=identifier, sha256=state['sha256'],
             confirmed_at=c['confirmed_at'], title=c['title'], sample_id=sample_id),
             observed_at=c['observed_at'], scope=c['scope'], note=c['note'], metrics=normalized,
             approximate_fields=c['approximate_fields'])
+        if c.get('published_at'):
+            result['published_at'] = c['published_at']
+        return result
 
     def start(self, identifier):
         with LOCK:
@@ -195,7 +198,8 @@ class ScreenshotStore:
                 raise ValueError('本条已确认并留档；要记录新时点请重新导入截图')
             if state['status'] == 'recognizing':
                 raise ValueError('请等待识别结束后再核对')
-            if set(payload) != {'reviewed', 'title', 'sample_id', 'observed_at', 'scope', 'metrics', 'note'} or payload['reviewed'] is not True:
+            required = {'reviewed', 'title', 'sample_id', 'observed_at', 'scope', 'metrics', 'note'}
+            if not required <= set(payload) or set(payload) - required - {'published_at'} or payload['reviewed'] is not True:
                 raise ValueError('请先勾选已对照原图核对')
             if not isinstance(payload['title'], str) or not 0 < len(payload['title'].strip()) <= 300:
                 raise ValueError('请填写作品名称')
@@ -207,6 +211,13 @@ class ScreenshotStore:
                     raise ValueError()
             except (TypeError, ValueError):
                 raise ValueError('请填写带时区的截图统计时间') from None
+            if payload.get('published_at'):
+                try:
+                    published = datetime.fromisoformat(payload['published_at'])
+                    if published.tzinfo is None or published > captured:
+                        raise ValueError()
+                except (TypeError, ValueError):
+                    raise ValueError('发布时间须包含日期和时区，且不能晚于统计时间') from None
             if payload['sample_id']:
                 sample_path = JobStore(self.workspace).sample_path(payload['sample_id'])
                 if not sample_path.is_file():

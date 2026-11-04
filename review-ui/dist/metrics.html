@@ -9,6 +9,7 @@
 <form id="confirm-form" class="metric-form"><h2>核对数据</h2><p class="helper">确认会保存一份独立快照，可在“开始复盘”中选入本轮数据计算。不会改写历史复盘，也不自动判定修改有效。</p>
 <label class="field"><span>作品名称（必填）</span><input id="title" required maxlength="300" placeholder="例如：星河生日蛋糕"></label>
 <label class="field"><span>关联已登记视频（可选）</span><select id="sample"><option value="">独立记录／暂不关联</option></select></label>
+<label class="field"><span>视频发布时间（北京时间）</span><input id="published" type="datetime-local"><small id="published-hint">从截图顶部识别；看不清时留空。与截图统计时间分别保存。</small></label>
 <label class="field"><span>截图对应的统计时间（必填，北京时间）</span><input id="observed" type="datetime-local" required><small>请填截图时点；上传时间和手机状态栏时钟不能代替完整日期。</small></label>
 <label class="field"><span>顶部指标卡片的统计范围</span><select id="scope"><option value="unknown">不确定</option><option value="cumulative">截至截图时累计</option><option value="period">指定时段（请在备注填写起止时间）</option></select></label>
 <div id="metric-fields" class="number-grid"></div>

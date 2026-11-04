@@ -58,6 +58,7 @@ class WebJobTests(unittest.TestCase):
         sample = read(self.store.root(job['id']) / 'sample.json')
         self.assertEqual(sample['platform_metrics']['metrics']['plays'], 2791)
         self.assertEqual(sample['platform_metrics']['source']['record_id'], identifier)
+
         self.assertEqual(self.sample.read_bytes(), original_sample)
         evidence = self.root / 'evidence.json'
         (self.root / 'frame.jpg').write_bytes(b'frame fixture')
@@ -71,6 +72,42 @@ class WebJobTests(unittest.TestCase):
         self.assertEqual(len(images), 2)
         self.assertIn('material-' + identifier, bundle['catalog'])
         self.assertEqual(self.launch_fake(job['id'])[1].call_count, 1)
+
+    def test_work_materials_binding_restores_and_freezes_into_plan(self):
+        screenshots, identifier = self.screenshot(sample_id='test-video')
+        before = self.sample.read_bytes()
+        saved = self.store.materials('test-video', dict(sample_id='test-video', revision=0,
+            metrics_record_id=identifier, match_confirmed=True))
+        self.assertEqual(self.store.materials('test-video')['metrics_record_id'], identifier)
+        self.assertEqual(self.sample.read_bytes(), before)
+        job = self.plan()
+        request = read(self.store.root(job['id'])/'request.json')
+        self.assertEqual(request['metrics_record_id'], identifier)
+        self.store.materials('test-video', dict(sample_id='test-video', revision=saved['revision'],
+            metrics_record_id='', match_confirmed=False))
+        self.assertEqual(read(self.store.root(job['id'])/'request.json'), request)
+        with self.assertRaisesRegex(ValueError, '变化'):
+            self.store.materials('test-video', dict(sample_id='test-video', revision=0,
+                metrics_record_id=identifier, match_confirmed=True))
+        create_sample(str(self.video), 'goal', 'audience', 'none', sample_id='other', root=self.root)
+        with self.assertRaisesRegex(ValueError, '不一致'):
+            self.store.materials('other', dict(sample_id='other', revision=0,
+                metrics_record_id=identifier, match_confirmed=True))
+
+    def test_publication_time_is_confirmed_preserved_and_checked(self):
+        screenshots, identifier = self.screenshot(sample_id='test-video')
+        source = screenshots.read(identifier)
+        image, _ = screenshots.image(identifier)
+        new = screenshots.upload({'image_base64':base64.b64encode(image.read_bytes()).decode()})
+        payload={k:source['confirmation'][k] for k in ('reviewed','title','sample_id','observed_at','scope','metrics','note')}
+        for invalid in ('2026-11-02T00:00:00+08:00','2026-10-07T14:37:00','not-a-date'):
+            with self.assertRaisesRegex(ValueError, '发布时间'):
+                screenshots.confirm(new['id'],dict(payload,published_at=invalid))
+        screenshots.confirm(new['id'],dict(payload,published_at='2026-10-07T14:37:00+08:00'))
+        binding=self.store.materials('test-video',dict(sample_id='test-video',revision=0,
+            metrics_record_id=new['id'],match_confirmed=True))
+        self.assertEqual(binding['published_at'],'2026-10-07T14:37:00+08:00')
+        self.assertEqual(screenshots.for_workflow(new['id'],'test-video',True)['published_at'],binding['published_at'])
 
     def test_screenshot_human_gate_mismatch_and_tampering(self):
         screenshot, identifier = self.screenshot(sample_id='test-video')
