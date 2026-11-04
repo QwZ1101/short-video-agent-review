@@ -1,7 +1,7 @@
 """规则编排与数据条件分支，明确总调用预算，保留人工复核入口。
 
 live 重新检查材料和取帧，再分析、验证；replay 只回放保存的真实结果。
-这不是模型自主规划器，不自动重试、不自动接受候选稿。
+这不是模型自主规划器；可显式启用有预算上限的故障重试，不自动接受候选稿。
 """
 import argparse
 from datetime import datetime, timezone
@@ -12,6 +12,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+import time
 
 from check_materials import PROJECT_ROOT, load_sample, resolve_path
 from review_tutorial import render_report, validate_review, write_json
@@ -79,7 +80,7 @@ def execute_stage(root, state, identifier, action, model_stage=False):
 def run_script(root, stage, script, arguments, timeout=240):
     log_path = root / (stage + ".log")
     print("正在运行：" + stage, flush=True)
-    with log_path.open("w", encoding="utf-8") as log:
+    with log_path.open("a", encoding="utf-8") as log:
         result = subprocess.run([sys.executable, str(PROJECT_ROOT / script)] + arguments,
                                 cwd=str(PROJECT_ROOT), stdout=log, stderr=subprocess.STDOUT, timeout=timeout)
     if result.returncode:
@@ -133,7 +134,9 @@ def run_replay(root, state, source):
     return paths
 
 
-def run_live(root, state, sample_path, model, max_repair_rounds=0):
+def run_live(root, state, sample_path, model, max_repair_rounds=0, model_retry_limit=0):
+    if type(model_retry_limit) is not int or model_retry_limit not in (0, 1):
+        raise ValueError('每个模型阶段最多重试一次')
     if type(max_repair_rounds) is not int or not 0 <= max_repair_rounds <= 2:
         raise ValueError("返修最多允许 0 到 2 轮")
     sample = load_sample(sample_path)
@@ -147,6 +150,8 @@ def run_live(root, state, sample_path, model, max_repair_rounds=0):
     plan["max_repair_rounds"] = max_repair_rounds
     plan["repair_policy"] = "遇到证据不足停止；每轮修正和再次验证需要两个剩余调用预算"
     state["plan"] = plan
+    state['model_retry_limit'] = model_retry_limit
+    plan['model_retry_limit'] = model_retry_limit
     write_json(root / "plan.json", plan)
     state["stages"] = [{"id": task["id"], "name": task["name"], "status": "pending"} for task in plan["tasks"]]
     save_state(root, state, "plan_created", planner=plan["planner"], ready=plan["ready"])
@@ -188,14 +193,40 @@ def run_live(root, state, sample_path, model, max_repair_rounds=0):
                    "--output-dir", str(destination), "--model", model])
         paths["analysis_dir"] = read_json(destination / "latest.json")["run_dir"]
         return {"analysis_dir": paths["analysis_dir"]}
-    execute_stage(root, state, "analysis", analysis, model_stage=True)
+    def model_action(identifier, action):
+        step = next(s for s in state['stages'] if s['id'] == identifier)
+        step['attempts'] = []
+        for attempt in range(1 + model_retry_limit):
+            started = now()
+            try:
+                result = action()
+                step['attempts'].append(dict(number=attempt+1,status='completed',started_at=started,finished_at=now()))
+                return result
+            except Exception:
+                candidates = sorted((root/identifier).glob('run-*/run.json'), reverse=True)
+                meta = read_json(candidates[0]) if candidates else {}
+                kind = meta.get('error_kind')
+                step['attempts'].append(dict(number=attempt+1,status='failed',error_kind=kind,
+                    started_at=started,finished_at=now(),metadata=str(candidates[0]) if candidates else None))
+                # Reserve one call for verification when retrying analysis. Never retry local/preflight failures.
+                reserve = 1 if identifier == 'analysis' else 0
+                retryable = kind in ('network_or_incomplete_stream','invalid_report_envelope','missing_report_fields','invalid_model_output')
+                if attempt >= model_retry_limit or not retryable or state['model_stage_budget'] - state['model_stage_attempts'] <= reserve:
+                    raise
+                state['model_stage_attempts'] += 1
+                state['retry_count'] = state.get('retry_count',0) + 1
+                save_state(root,state,'model_stage_retry_reserved',stage=identifier,attempt=attempt+2,error_kind=kind,
+                    reason='故障恢复：'+kind+'；开始本阶段第 '+str(attempt+2)+' 次尝试，计入总预算',
+                    reused_analysis=identifier=='verification')
+                time.sleep(1)
+    execute_stage(root, state, "analysis", lambda: model_action('analysis',analysis), model_stage=True)
 
     def verification():
         destination = root / "verification"
         run_script(root, "verification", "verify_tutorial.py", ["--review-dir", paths["analysis_dir"], "--output-dir", str(destination), "--model", model])
         paths["verification_dir"] = read_json(destination / "latest.json")["run_dir"]
         return {"verification_dir": paths["verification_dir"]}
-    execute_stage(root, state, "verification", verification, model_stage=True)
+    execute_stage(root, state, "verification", lambda: model_action('verification',verification), model_stage=True)
     if max_repair_rounds:
         from refinement import run_refinement_loop
         run_refinement_loop(root, state, paths, model, max_repair_rounds)
@@ -284,7 +315,7 @@ def write_failure_report(root, state):
     state["human_review"] = {"status": "unavailable", "reason": "流程失败，未产生本轮通过结构检查的验证候选稿"}
     lines = ["# 复盘流程停止报告", "", "**本轮未完成验证，不能将初稿当作已通过验证的结果。**", "",
              "停止原因：" + state["stop_reason"], "",
-             "模型阶段尝试次数：%s / %s；未自动重试。" % (state["model_stage_attempts"], state["model_stage_budget"]), "",
+             "模型阶段尝试次数：%s / %s；每个阶段的额外重试上限为 %s。" % (state["model_stage_attempts"], state["model_stage_budget"], state.get('model_retry_limit',0)), "",
              "| 步骤 | 状态 |", "| --- | --- |"]
     lines.extend("| %s | %s |" % (item["name"], item["status"]) for item in state["stages"])
     lines.extend(["", "已经生成的文件和原始模型输出均保留。排查后是否重跑需要另行决定；本程序不会把旧结果补成新结果。", "",

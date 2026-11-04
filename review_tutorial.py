@@ -352,6 +352,8 @@ def main():
         message = str(error)
         if run_dir:
             metadata.update(status="failed", error=message)
+            if metadata.get('finish_reason') == 'stop':
+                metadata['error_kind'] = 'invalid_model_output'
             if isinstance(error, ReviewFormatError):
                 metadata['error_kind'] = error.kind
             if started is not None:

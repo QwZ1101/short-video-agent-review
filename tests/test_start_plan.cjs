@@ -39,3 +39,12 @@ test('selection change while planning discards stale response and explains retry
   resolve({id:'old',ready:true});await first;
   assert.match(ui.get('plan-status').textContent,/选择已变化/);assert.equal(vm.runInContext('planned',ui.context),null);
 });
+test('retry checkbox explicitly reserves two extra calls in the frozen request',async()=>{
+  for(const enabled of [true,false]){
+    let request;
+    const ui=setup({api:async(path,body)=>{request=body;return {id:'j',ready:true};}});
+    ui.get('model-retry').checked=enabled;await ui.run();
+    assert.equal(request.model_retry_limit,enabled?1:0);
+    assert.equal(request.max_model_calls,enabled?4:2);
+  }
+});

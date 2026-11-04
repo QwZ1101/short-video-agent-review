@@ -188,11 +188,14 @@ class JobStore:
 
     def plan(self, payload):
         required = {"sample_id", "max_model_calls", "max_repair_rounds"}
-        if not required <= set(payload) or set(payload) - required - {'metrics_record_id', 'metrics_match_confirmed'}:
+        if not required <= set(payload) or set(payload) - required - {'metrics_record_id', 'metrics_match_confirmed', 'model_retry_limit'}:
             raise ValueError("计划请求字段不正确")
         budget, rounds = payload["max_model_calls"], payload["max_repair_rounds"]
-        if type(rounds) is not int or rounds not in (0, 1, 2) or type(budget) is not int or budget != 2 + 2 * rounds:
-            raise ValueError("网页预算需为 2 / 4 / 6 次，分别对应 0 / 1 / 2 轮可选返修")
+        retry_limit = payload.get('model_retry_limit',0)
+        if type(retry_limit) is not int or retry_limit not in (0,1):
+            raise ValueError('每个模型阶段最多重试一次')
+        if type(rounds) is not int or rounds not in (0, 1, 2) or type(budget) is not int or budget != 2 + 2 * rounds + 2 * retry_limit:
+            raise ValueError("预算应为基础 2 次 + 每轮返修 2 次 + 启用故障恢复时额外 2 次")
         sample, fingerprint = self.inputs(payload["sample_id"])
         if 'metrics_record_id' not in payload:
             binding = self.materials(payload['sample_id'])
@@ -287,6 +290,7 @@ class JobStore:
         if workflow.exists():
             live = read(workflow)
             result["workflow"] = {"status": live["status"], "model_stage_attempts": live["model_stage_attempts"],
+                "retry_count": live.get('retry_count',sum(max(0,len(s.get('attempts',[]))-1) for s in live['stages'])),
                 "stop_reason": redact(live.get("stop_reason")), "stages": [{"name": item["name"], "status": item["status"]} for item in live["stages"]]}
             for stage in live["stages"]:
                 if stage["status"] != "failed" or stage.get("id") not in ("analysis", "verification", "repair-1", "repair-2", "reverify-1", "reverify-2"):
@@ -341,7 +345,7 @@ def execute(store, identifier):
         run.mkdir(parents=True)
         created_run = True
         save_state(run, state, "web_job_started", job_id=identifier)
-        paths = run_live(run, state, root / "sample.json", request["model"], request["max_repair_rounds"])
+        paths = run_live(run, state, root / "sample.json", request["model"], request["max_repair_rounds"], model_retry_limit=request.get('model_retry_limit',0))
         create_handoff(run, state, paths)
         atomic_json(run.parent / "latest.json", {"run_dir": str(run), "report_path": str(run / "workflow.md"), "mode": "live", "status": state["status"]})
         job.update(status="awaiting_human_review", finished_at=now())

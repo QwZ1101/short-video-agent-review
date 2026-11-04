@@ -48,6 +48,8 @@ B 在计划登记前已发布时，比较结果标为回顾性，不冒充预先
 新增测试覆盖少量选择、来源冻结、实际采用与效果分离、时长及口径拦截、零与缺失值、百分点与相对变化、缺基线结案、父子计划归属、修订失效、来源篡改和 HTTP 访问校验。合成数据和浏览器验收不代表真实视频已产生效果提升。
 # Published-video workflow (2026-11-04)
 
+网页新任务默认启用一次故障恢复：内容分析、证据验证各最多重试一次，基础流程总预算上限为 4 次。关闭恢复仍为 2 次；语义返修预算另加。只有网络中断或不合格模型输出触发恢复，本地材料或身份校验失败直接停止。验证重试不重跑成功的内容分析；每次输出目录、阶段日志、失败分类、预算预留事件与尝试历史都保留。旧请求未包含此选项时保持不重试。
+
 Submitted reviews now lead directly to selecting one or two recommendations for the next video. The current-video revision form is removed from the review UI. Historical task records remain available through their existing storage and APIs.
 
 When a review is embedded in the workspace, its next-plan link navigates the outer workspace to `/cycles?run=...`. Material and review tools continue to open within the workspace. The cycle page retains its frame restriction.

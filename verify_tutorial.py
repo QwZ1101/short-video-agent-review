@@ -193,6 +193,8 @@ def main():
     except (OSError, ValueError, KeyError, IndexError, TypeError) as error:
         if run_dir:
             metadata.update(status="failed", error=str(error))
+            if metadata.get('finish_reason') == 'stop':
+                metadata['error_kind'] = 'invalid_model_output'
             if isinstance(error, ModelNetworkError):
                 metadata.update(error_kind="network_or_incomplete_stream", transport=error.transport)
                 if error.partial_content:

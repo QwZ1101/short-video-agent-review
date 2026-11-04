@@ -187,6 +187,15 @@ class WebJobTests(unittest.TestCase):
         self.assertEqual(read(root / "sample.json")["video"]["path"], str(self.video))
         self.assertNotIn("fixture-credential-not-real", ''.join(path.read_text(encoding="utf-8") for path in root.glob('*.json*')))
 
+    def test_retry_policy_is_frozen_and_budget_cannot_hide_extra_calls(self):
+        job=self.store.plan(dict(sample_id='test-video',max_model_calls=4,max_repair_rounds=0,model_retry_limit=1))
+        request=read(self.store.root(job['id'])/'request.json')
+        self.assertEqual(request['model_retry_limit'],1)
+        self.assertEqual(job['model_stage_budget'],4)
+        for changes in ({'max_model_calls':2},{'model_retry_limit':2},{'model_retry_limit':True}):
+            with self.assertRaises(ValueError):
+                self.store.plan(dict(dict(sample_id='test-video',max_model_calls=4,max_repair_rounds=0,model_retry_limit=1),**changes))
+
     def test_base_url_check_and_failure_detail_are_safe(self):
         with patch.dict(os.environ, {"DASHSCOPE_BASE_URL": "https://untrusted.test/?token=fixture-secret"}):
             job = self.plan()
