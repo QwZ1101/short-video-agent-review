@@ -23,7 +23,9 @@
 <label class="data-match"><input id="metrics-match" type="checkbox"> 我确认所选截图属于上方这条视频，已核对作品和统计时间</label>
 <button id="refresh-metrics" class="secondary" type="button">刷新截图记录</button>
 <details id="metrics-editor"><summary>上传截图 / 识别与人工核对（在本页完成）</summary>
-<iframe id="metrics-frame" title="上传截图并核对平台数据"></iframe></details>
+<p id="metrics-editor-status" role="status" aria-live="polite"></p>
+<div id="metrics-editor-recovery" hidden><button id="metrics-fix-video" class="secondary" type="button">检查视频资料</button> <button id="metrics-use-existing" class="secondary" type="button">使用上方已登记作品</button> <button id="metrics-retry" class="secondary" type="button">重试打开上传区</button></div>
+<iframe id="metrics-frame" title="上传截图并核对平台数据" hidden></iframe></details>
 <p class="helper">截图识别单独使用 1 次模型调用。复盘计算不额外调用模型；原图和人工核对记录保留，历史复盘不改写。统计范围不确定时只展示核对值，不计算比值。</p>
 </div><button id="save-materials" class="primary" type="button">保存作品材料</button><p id="materials-saved" class="helper" role="status"></p></section>
 <div class="start-grid"><section class="start-card">

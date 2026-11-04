@@ -15,7 +15,7 @@ let materialsBinding=null,registerPending=null;
 async function ensureVideo(){
   if(!$('register-details').open)return $('samples').value;
   if(registerPending)return registerPending;
-  const form=$('register-form');if(!form.reportValidity())throw new Error('请先填写视频路径、目标和受众。');
+  const form=$('register-form');if(!form.checkValidity())throw new Error('新作品资料尚未填完整。请补全视频路径、目标和受众；如果要给已登记作品补图，请收起“登记新作品”，在上方选择作品。');
   registerPending=(async()=>{const payload=Object.fromEntries(new FormData(form));if(!payload.sample_id)delete payload.sample_id;if(!payload.transcript)delete payload.transcript;const result=await api('/api/samples/register',payload);$('register-details').open=false;await loadSamples(result.sample_id);await refreshJobs();message('视频已保存，继续添加同一作品的数据截图。');return result.sample_id;})();
   try{return await registerPending;}finally{registerPending=null;}
 }
@@ -45,7 +45,29 @@ function metricsChanged(){invalidate();const r=metricRecords.find(r=>r.id===$('m
 }
 $('metrics-record').onchange=metricsChanged;$('metrics-match').onchange=invalidate;
 $('refresh-metrics').onclick=()=>refreshMetrics().catch(e=>message(e.message));
-$('metrics-editor').ontoggle=async()=>{if(!$('metrics-editor').open)return;try{const sample=await ensureVideo();if(!sample)throw new Error('请先登记作品。');const frame=$('metrics-frame'),url='/metrics?embed=1&sample='+encodeURIComponent(sample);if(frame.getAttribute('src')!==url)frame.src=url;}catch(e){$('metrics-editor').open=false;message(e.message);}};
+let openingMetrics=false;
+async function openMetricsEditor(){
+  if(openingMetrics||!$('metrics-editor').open)return;
+  openingMetrics=true;$('metrics-editor-status').textContent='正在准备这条作品的截图上传区…';$('metrics-editor-recovery').hidden=true;$('metrics-frame').hidden=true;
+  try{
+    const sample=await ensureVideo();if(!sample)throw new Error('请先登记作品，再为这条作品上传截图。');
+    const frame=$('metrics-frame'),url='/metrics?embed=1&sample='+encodeURIComponent(sample);
+    if(frame.getAttribute('src')!==url)frame.src=url;
+    frame.hidden=false;$('metrics-editor-status').textContent='请在下方选择截图，再点击“上传原图”。';
+  }catch(e){
+    // Keep the disclosure open: an error at the top of a long page looks like a dead control.
+    $('metrics-editor-status').textContent=e.message;$('metrics-editor-recovery').hidden=false;
+  }finally{openingMetrics=false;}
+}
+$('metrics-editor').ontoggle=openMetricsEditor;
+$('metrics-retry').onclick=openMetricsEditor;
+$('metrics-use-existing').onclick=()=>{$('register-details').open=false;openMetricsEditor();};
+$('metrics-fix-video').onclick=()=>{
+  $('register-details').open=true;const form=$('register-form'),invalid=form.querySelector(':invalid');
+  if(invalid){for(let p=invalid.parentElement;p&&p!==form;p=p.parentElement)if(p.tagName==='DETAILS')p.open=true;invalid.focus();invalid.reportValidity();}
+  $('register-details').scrollIntoView({behavior:'smooth',block:'center'});
+};
+$('register-details').addEventListener('toggle',()=>{if(!$('register-details').open&&$('metrics-editor').open)openMetricsEditor();});
 window.addEventListener('message',event=>{if(event.origin!==location.origin||event.source!==$('metrics-frame').contentWindow)return;if(event.data?.type==='metrics-height'&&Number.isFinite(event.data.height))$('metrics-frame').style.height=Math.max(280,Math.min(5000,event.data.height))+'px';if(event.data?.type==='metrics-confirmed'){refreshMetrics(event.data.id).then(async()=>{if($('metrics-record').value!==event.data.id)throw new Error('截图不属于当前作品，请核对关联视频后保存。');await saveMaterials();message('截图已核对并绑定到作品，后续复盘自动带入。');}).catch(e=>message(e.message));}});
 async function init(){try{token=(await api('/api/session')).token;await loadSamples(new URLSearchParams(location.search).get('sample'));await refreshJobs(new URLSearchParams(location.search).get('job'));}catch(error){message(error.message);}}
 init();
