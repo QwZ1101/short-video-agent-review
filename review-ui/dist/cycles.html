@@ -11,11 +11,10 @@
 <p id="parent-note" class="helper"></p>
 <label class="field"><span>已复核的视频</span><select id="source-run" required><option value="">请选择已提交的复核</option></select></label>
 <p id="source-goal" class="helper"></p><div id="suggestions"></div>
-<label class="field"><span>下一条 B 准备拍什么</span><input id="cycle-title" required maxlength="300" placeholder="例如：粒子花教程，开头先展示成品"></label>
 <details class="settings-drawer"><summary>比较设置 · 默认看发布后 24 小时的点赞表现</summary><div class="grid"><label class="field"><span>本轮主要看哪个指标</span><select id="primary-metric"><option value="likes_per_100">每百次播放点赞数</option><option value="plays">播放量</option><option value="likes">点赞量</option><option value="completion_rate">完播率</option><option value="bounce_2s_rate">2秒跳出率</option></select></label><label class="field"><span>期望方向</span><select id="expected-direction"><option value="increase">升高</option><option value="decrease">降低</option></select></label></div>
 <div class="grid"><label class="field"><span>统一观察窗口（发布后小时数）</span><input id="window-hours" type="number" min="1" max="2160" step="0.5" value="24" required></label><label class="field"><span>截图时间容差（分钟）</span><input id="window-tolerance" type="number" min="0" max="60" value="30" required></label></div>
 <p class="helper">例如 A、B 都取发布后 24 小时的累计数据。容差最多 60 分钟且不超过窗口的 10%。保存后冻结本轮口径，不能看完结果再调整标准。</p>
-</details><button class="primary" type="submit">保存计划，准备视频 B</button><button id="back-to-source" class="text-button" type="button">返回选择视频</button></form>
+</details><button class="primary" type="submit">保存计划</button><button id="back-to-source" class="text-button" type="button">返回选择视频</button></form>
 <section id="cycle-detail" hidden>
 <details id="round-plan" class="cycle-card"><summary><span id="detail-title"></span><span id="cycle-status" class="badge"></span></summary><p id="plan-summary"></p><ol id="planned-items"></ol><a id="cycle-report" target="_blank" rel="noopener">查看完整记录 ↗</a><p id="lineage" class="helper"></p></details>
 <form id="implementation-form" class="cycle-card"><h2>选择下一条视频</h2>

@@ -225,7 +225,6 @@ async function startPlan(previous=null){
   $('cycle-picker').value='';
   $('source-run').value='';
   $('create-cycle').reset();
-  $('cycle-title').value='';
   $('parent-note').textContent=parent?'接续视频 · '+workTitle(parent.target.sample_id):'';
   message('');
   flowStep=parent?1:0;

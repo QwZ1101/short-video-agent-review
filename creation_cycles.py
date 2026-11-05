@@ -2,6 +2,7 @@
 import copy
 from datetime import datetime
 import math
+from pathlib import Path
 import re
 import uuid
 
@@ -219,8 +220,17 @@ class CycleStore:
                     raise ValueError('下一轮必须从已总结计划的视频 B 的复核开始')
                 if goal != self.locked_goal(previous):
                     raise ValueError('接续视频的复核目标与创作链不一致，请使用目标一致的复核，或开启新链')
+            title = text(payload.get('title', ''), '计划名称', required=False, limit=300)
+            if not title:
+                sample_id = source['sample_id']
+                try:
+                    sample = read_json(self.jobs.sample_path(sample_id))
+                    source_name = Path(sample['video']['path']).stem or sample_id
+                except (OSError, ValueError, KeyError, TypeError):
+                    source_name = sample_id
+                title = f'接续「{source_name[:295]}」'
             record = dict(schema_version=1, id='cycle-' + uuid.uuid4().hex, revision=0, status='planned',
-                created_at=now(), title=text(payload.get('title'), '下一条的名称或题材', limit=300),
+                created_at=now(), title=title,
                 source=source, items=selected, window_hours=window, tolerance_minutes=tolerance,
                 primary_metric=payload['primary_metric'], expected_direction=payload['expected_direction'],
                 target=None, comparison=None, decisions=[], parent_id=parent, chain_goal=goal)

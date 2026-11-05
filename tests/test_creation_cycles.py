@@ -57,6 +57,7 @@ class CycleTests(unittest.TestCase):
                       [dict(finding_id='unknown', planned_change='x')], [dict(finding_id='f1', planned_change='')]):
             with self.assertRaises(ValueError): self.store.create(dict(self.create, items=items))
         r = self.store.create(self.create)
+        self.assertEqual(r['title'], self.create['title'])
         self.assertEqual(r['items'][0]['suggestion'], '改善')
         self.assertEqual(digest(self.fixture.root / 'human-feedback.json'), before)
         self.assertFalse((self.fixture.root / 'improvement-tasks.json').exists())
@@ -178,9 +179,11 @@ class CycleTests(unittest.TestCase):
             with self.assertRaises(urllib.error.HTTPError) as error:
                 op.open(urllib.request.Request(base+'/api/cycles/create', data=json.dumps(self.create).encode(), headers=headers))
             self.assertEqual(error.exception.code, 403)
-        with op.open(urllib.request.Request(base+'/api/cycles/create', data=json.dumps(self.create).encode(), headers={'Content-Type': 'application/json', 'X-Review-Token': server.token})) as response:
+        payload = {key: value for key, value in self.create.items() if key != 'title'}
+        with op.open(urllib.request.Request(base+'/api/cycles/create', data=json.dumps(payload).encode(), headers={'Content-Type': 'application/json', 'X-Review-Token': server.token})) as response:
             created = json.load(response)
         self.assertEqual(created['status'], 'planned')
+        self.assertEqual(created['title'], '接续「test」')
         with op.open(urllib.request.Request(base+'/api/cycles/close', data=json.dumps({'id':created['id'],'revision':created['revision']}).encode(), headers={'Content-Type':'application/json','X-Review-Token':server.token})) as response:
             closed = json.load(response)
         self.assertEqual(closed['status'], 'closed')

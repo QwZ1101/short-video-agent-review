@@ -112,7 +112,21 @@ async function mutate(action,payload){
   }
 }
 $('source-run').onchange=()=>{dirty=false;loadSource();};
-$('create-cycle').onsubmit=e=>{e.preventDefault();if(!source){message('请先选择已提交复核。');return;}const items=source.findings.filter(f=>$('pick-'+f.id).checked).map(f=>({finding_id:f.id,planned_change:$('change-'+f.id).value}));mutate('create',{source_run:source.run,title:$('cycle-title').value,items,window_hours:Number($('window-hours').value),tolerance_minutes:Number($('window-tolerance').value),primary_metric:$('primary-metric').value,expected_direction:$('expected-direction').value,parent_id:parent?.id||null});};
+$('create-cycle').onsubmit=e=>{
+  e.preventDefault();
+  if(!source){message('请先选择已提交复核。');return;}
+  const items=source.findings.filter(f=>$('pick-'+f.id).checked)
+    .map(f=>({finding_id:f.id,planned_change:$('change-'+f.id).value}));
+  mutate('create',{
+    source_run:source.run,
+    items,
+    window_hours:Number($('window-hours').value),
+    tolerance_minutes:Number($('window-tolerance').value),
+    primary_metric:$('primary-metric').value,
+    expected_direction:$('expected-direction').value,
+    parent_id:parent?.id||null,
+  });
+};
 $('implementation-form').onsubmit=e=>{e.preventDefault();mutate('implement',{...base(),sample_id:$('target-sample').value,executions:current.items.map(i=>({finding_id:i.finding_id,status:$('applied-'+i.finding_id).value,note:$('note-'+i.finding_id).value,evidence:current.target?.sample_id===$('target-sample').value?(current.target.executions.find(e=>e.finding_id===i.finding_id)?.evidence||''):''}))});};
 $('comparison-form').onsubmit=e=>{e.preventDefault();mutate('compare',{...base(),record_a:$('record-a').value,record_b:$('record-b').value,published_a:dateValue('published-a'),published_b:dateValue('published-b'),screenshots_match:$('screenshots-match').checked,same_goal_confirmed:$('same-goal').checked,confounders:$('confounders').value});};
 $('defer-comparison').onclick=()=>mutate('defer',{...base(),reason:$('missing-reason').value});
