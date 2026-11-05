@@ -4,40 +4,31 @@ const vm=require('node:vm');
 const fs=require('node:fs');
 const path=require('node:path');
 const source=fs.readFileSync(path.join(__dirname,'../review-ui/dist/start.js'),'utf8');
-const handler=source.slice(source.indexOf('let openingMetrics=false;'),source.indexOf("$('metrics-editor').ontoggle="));
-function setup(ensureVideo){
+const handler=source.slice(source.indexOf('function openMetricsEditor()'),source.indexOf("$('metrics-editor').ontoggle="));
+function setup(){
   const nodes=new Map();
   const get=id=>{if(!nodes.has(id))nodes.set(id,{open:true,hidden:false,textContent:'',src:'',getAttribute(k){return this[k];}});return nodes.get(id);};
-  const context=vm.createContext({$:get,ensureVideo,encodeURIComponent});
+  const samples=[{sample_id:'tutorial-013',title:'已登记作品'},{sample_id:'tutorial-014',title:'另一条作品'}];
+  const context=vm.createContext({$:get,samples,encodeURIComponent,api:()=>assert.fail('opening upload must not register a video')});
   vm.runInContext(handler,context);
   return {get,open:()=>vm.runInContext('openMetricsEditor()',context)};
 }
-test('failed registration keeps upload expanded with a local error and hides stale screenshot form',async()=>{
-  const ui=setup(async()=>{throw new Error('missing video');});
-  ui.get('metrics-frame').src='/metrics?embed=1&sample=old';
-  await ui.open();
+test('an existing work opens upload even while new registration is expanded',()=>{
+  const ui=setup();
+  ui.get('register-details').open=true;
+  ui.get('samples').value='tutorial-013';
+  ui.open();
   assert.equal(ui.get('metrics-editor').open,true);
-  assert.equal(ui.get('metrics-editor-status').textContent,'missing video');
-  assert.equal(ui.get('metrics-editor-recovery').hidden,false);
-  assert.equal(ui.get('metrics-frame').hidden,true);
-});
-test('retry opens the upload for the corrected work without collapsing the panel',async()=>{
-  let ready=false;
-  const ui=setup(async()=>{if(!ready)throw new Error('network');return 'tutorial-005';});
-  await ui.open();ready=true;await ui.open();
-  assert.equal(ui.get('metrics-frame').src,'/metrics?embed=1&sample=tutorial-005');
+  assert.equal(ui.get('metrics-editor-status').textContent,'当前作品 · 已登记作品');
+  assert.equal(ui.get('metrics-frame').src,'/metrics?embed=1&sample=tutorial-013');
   assert.equal(ui.get('metrics-frame').hidden,false);
-  assert.equal(ui.get('metrics-editor-recovery').hidden,true);
 });
-test('rapid repeated clicks do not register a video twice',async()=>{
-  let resolve,calls=0;const pending=new Promise(r=>resolve=r);
-  const ui=setup(()=>{calls++;return pending;});
-  const first=ui.open();await ui.open();assert.equal(calls,1);
-  resolve('tutorial-006');await first;assert.equal(ui.get('metrics-frame').hidden,false);
-});
-test('no selected work shows recovery instead of an unbound upload',async()=>{
-  const ui=setup(async()=> '');await ui.open();
+test('switching or clearing the work updates the upload context',()=>{
+  const ui=setup();
+  ui.get('samples').value='tutorial-013';ui.open();
+  ui.get('samples').value='tutorial-014';ui.open();
+  assert.equal(ui.get('metrics-frame').src,'/metrics?embed=1&sample=tutorial-014');
+  ui.get('samples').value='';ui.open();
   assert.equal(ui.get('metrics-frame').hidden,true);
-  assert.equal(ui.get('metrics-editor-recovery').hidden,false);
-  assert.equal(ui.get('metrics-editor').open,true);
+  assert.match(ui.get('metrics-editor-status').textContent,/先选择已登记作品/);
 });
