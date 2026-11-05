@@ -15,14 +15,14 @@ render=function(){
   bReview=null;
   bPending=null;
   missingSide=undefined;
-  localStorage.setItem('review-active-cycle',current.id);
+  localStorage.setItem('review-active-cycle',current.detached_from_chain||current.id);
   flowStep=resumeStep();
   syncFlow();
   refreshBReview().then(()=>{
     if(!dirty&&$('inline-work').hidden){flowStep=resumeStep();syncFlow();}
   });
   restoreWorkMaterials();
-  window.ChainOverview?.load(current.id);
+  if(!current.detached_from_chain)window.ChainOverview?.load(current.id);
   $('single-round').open=!current.comparison||current.comparison.result.status!=='ready';
   $('round-plan').open=false;
 };
@@ -30,8 +30,10 @@ async function restoreWorkMaterials(){if(!current?.target||current.comparison)re
 function syncFlow(){
   const editing=!$('inline-work').hidden;
   const closed=['decided','closed'].includes(current?.status);
-  $('flow-progress').textContent=closed?'已结束':`第 ${flowStep+1} 步 / 共 4 步`;
-  $('flow-title').textContent=closed?'本轮总结':flowTitles[flowStep];
+  const archived=!!current?.detached_from_chain;
+  $('flow-progress').textContent=archived?'已移出创作链':closed?'已结束':`第 ${flowStep+1} 步 / 共 4 步`;
+  $('flow-title').textContent=archived?'历史轮次':closed?'本轮总结':flowTitles[flowStep];
+  $('flow-steps').hidden=archived;
   $('flow-description').textContent=closed?'':flowDescriptions[flowStep];
   for(const marker of document.querySelectorAll('[data-step]')){
     const step=Number(marker.dataset.step);
@@ -49,7 +51,7 @@ function syncFlow(){
   if(!current)return;
   $('locked-chain-goal').textContent='创作链目标 · '+chainGoal(current);
   updateComparisonAction();
-  $('chain-overview').hidden=!current.target&&!closed;
+  $('chain-overview').hidden=archived||(!current.target&&!closed);
   $('single-round').hidden=flowStep!==3||(closed&&!current.comparison);
   $('b-review-panel').hidden=flowStep!==2||closed||!!bReview;
   $('implementation-form').hidden=flowStep!==2||closed;
@@ -62,7 +64,7 @@ function syncFlow(){
   $('decision-form').hidden=flowStep!==3||!current.comparison||closed||!bReview;
   $('next-round').hidden=flowStep!==3||!closed;
   if(current.status==='closed')$('decisions-summary').textContent='可以选择新视频继续复盘。';
-  $('continue-cycle').textContent=current.status==='closed'?'从新视频开始':'继续下一轮';
+  $('continue-cycle').textContent=archived?'返回原创作链':current.status==='closed'?'从新视频开始':'继续下一轮';
 }
 function updateComparisonAction(){
   if(!current.target)return;
@@ -187,7 +189,7 @@ $('return-work').onclick=async()=>{
         }
         if(!dirty&&bReview&&current.target?.sample_id===$('target-sample').value)flowStep=3;
       }
-      window.ChainOverview?.load(current.id);
+      if(!current.detached_from_chain)window.ChainOverview?.load(current.id);
     }else if(purpose==='source'){
       const {runs}=await api('/api/cycles/sources');
       const run=runs.find(r=>r.id===reviewed)||runs.find(r=>chosen&&r.sample_id===chosen);
@@ -241,7 +243,10 @@ $('exit-cycle').onclick=async()=>{
   await mutate('close',base());
   if(current.status==='closed')await startPlan();
 };
-$('continue-cycle').onclick=()=>startPlan(current.status==='decided'?current:null);
+$('continue-cycle').onclick=()=>{
+  if(current.detached_from_chain)return openCycle(current.detached_from_chain);
+  return startPlan(current.status==='decided'?current:null);
+};
 $('open-logs').onclick=()=>openWork('/logs','运行记录');
 const oldSubmit=$('comparison-form').onsubmit;
 $('comparison-form').onsubmit=async e=>{e.preventDefault();await refreshBReview();if(!bReview){message('请先完成 B 的人工复核，再比较数据。');goStep(2);return;}oldSubmit(e);};

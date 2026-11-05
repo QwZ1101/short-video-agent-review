@@ -78,6 +78,6 @@ window.ChainOverview=(()=>{
   get('chain-metric').onchange=()=>{if(data){renderTable();chart();}};
   get('chain-window').onchange=()=>load(selected,get('chain-window').value);
   get('chain-branch').onchange=()=>{if(get('chain-branch').value)load(get('chain-branch').value,get('chain-window').value);};
-  if(typeof current!=='undefined'&&current)load(current.id);
+  if(typeof current!=='undefined'&&current&&!current.detached_from_chain)load(current.id);
   return {load};
 })();
