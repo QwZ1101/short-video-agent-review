@@ -65,3 +65,13 @@ Submitted reviews now lead directly to selecting one or two recommendations for 
 When a review is embedded in the workspace, its next-plan link navigates the outer workspace to `/cycles?run=...`. Material and review tools continue to open within the workspace. The cycle page retains its frame restriction.
 
 Browser acceptance uses `tests/serve_cycle_fixture.py <absolute-state-file>` to create a separate synthetic workspace without model calls. Acceptance covers the embedded review link, suggestion selection, plan creation, B implementation, B human review, matched-window comparison, decision, next-cycle lineage and closing an unfinished cycle. Synthetic metrics must not be represented as real creator outcomes.
+
+## 整条创作链总览（2026-11-05）
+
+“比较与总结”优先展示整条创作链：一行一条视频，以视频名称显示，提供播放量、点赞量、每百次播放点赞数、完播率和两秒跳出率。趋势图可切换指标和已有轮次登记过的观察窗口；作品名称展开后可查看采用做法、截图依据和关联轮次。原来的两条视频比较保留在下方折叠详情中。
+
+总览只沿明确的父轮次关系连接 A→B→C，不按名称或作品重合猜测关联。同一作品在相邻轮次只占一行；遇到多个后续分支时，需要选择一条，不将不同分支混合。待创作的下一条仍显示在链尾。
+
+仅已确认的累计截图、相同目标和符合统一观察窗口的数据进入趋势；相邻数据的实际观察时长差也必须在容差内。缺失、口径不合格或来源校验失败的数据不补零，趋势线在该处断开。同一作品存在多份有效但不同的确认记录时显示冲突，不自动挑选。原值可查看不代表可以横向比较，观察性趋势不能认定某项建议的因果效果。
+
+`GET /api/cycles/chain?id=<cycle-id>&hours=<optional-hours>` 是只读接口，不调用模型、不修改历史。复用现有 HTTP 请求日志；读取会验证截图、确认记录和冻结快照。浏览器合成验收可运行 `tests/serve_chain_fixture.py <absolute-state-file>`，其三视频数据与真实用户记录隔离。

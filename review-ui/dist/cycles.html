@@ -19,13 +19,17 @@
 </details><button class="primary" type="submit">保存计划，准备视频 B</button></form>
 <section id="cycle-detail" hidden>
 <section class="cycle-card"><div class="row"><h2 id="detail-title"></h2><span id="cycle-status" class="badge"></span></div><p id="plan-summary"></p><ol id="planned-items"></ol><details><summary>查看本轮详情</summary><a id="cycle-report" target="_blank" rel="noopener">打开创作清单与完整记录 ↗</a><p id="lineage" class="helper"></p></details></section>
+<section id="chain-overview" class="cycle-card" hidden><div class="row"><h2>整条创作链</h2><button id="chain-root" type="button" class="secondary" hidden>查看其他分支</button><button id="chain-refresh" type="button" class="secondary">刷新总览</button></div>
+<p id="chain-scope" class="helper"></p><p id="chain-loading" role="status"></p><div id="chain-nodes" class="chain-nodes"></div>
+<div class="row"><label class="field">观察窗口<select id="chain-window"></select></label><label class="field">趋势指标<select id="chain-metric"></select></label><label id="chain-branches" class="field" hidden>本链有多条后续路径<select id="chain-branch"></select></label></div>
+<div id="chain-chart" class="table-scroll"></div><div id="chain-table" class="table-scroll"></div><p id="chain-warning" class="helper"></p></section>
 <form id="implementation-form" class="cycle-card"><h2>准备下一条作品 B</h2>
 <label class="field"><span>作品 B</span><select id="target-sample" required></select></label>
 <div id="b-review-panel"><p id="b-review-status" class="helper">选择作品后自动查找已有复盘。</p><button id="open-b-review" type="button" class="primary">登记作品 B</button></div>
 <details><summary>登记其他作品 / 刷新列表</summary><div class="row"><a id="register-b" href="/start" target="_blank" rel="noopener">登记其他作品</a><button id="refresh-options" class="secondary" type="button">刷新作品列表</button></div></details>
 <p id="adoption-help" class="helper">清单已带入下方，确认是否采用即可；实际做法不同时再修改。效果留到下一步比较。</p>
 <div id="execution-items"></div><button id="confirm-b" class="primary" type="submit">确认采用，比较数据</button><p class="helper">更换 B 或修改采用记录，会清空本轮当前对比；旧版仍在历史中。</p></form>
-<div id="compare-gate" class="cycle-card" hidden><h2>先完成 B 的人工复核</h2><p>复核完成后，再把 A / B 的数据放在一起看。</p><button id="back-b-review" class="primary" type="button">去复盘 B</button></div><section id="comparison-section" class="cycle-card" hidden><h2>对齐 A / B 的数据，再比较</h2>
+<details id="single-round" class="cycle-card"><summary>查看当前轮次的两条视频比较 / 调整数据</summary><div id="compare-gate" class="cycle-card" hidden><h2>先完成 B 的人工复核</h2><p>复核完成后，再把 A / B 的数据放在一起看。</p><button id="back-b-review" class="primary" type="button">去复盘 B</button></div><section id="comparison-section" class="cycle-card" hidden><h2>对齐 A / B 的数据，再比较</h2>
 <p id="window-instruction"></p><div class="row"><p class="helper">补充截图并确认保存后，返回本页会自动更新列表。</p><button id="refresh-comparison-records" class="secondary" type="button">刷新已核对截图</button></div><details id="comparison-inputs" open><summary>核对或更换比较数据</summary><form id="comparison-form"><div class="grid">
 <div><h3 id="label-a">视频 A</h3><label class="field"><span>A 发布时间（北京时间）</span><input id="published-a" type="datetime-local" required></label><label class="field"><span>A 已核对的截图</span><select id="record-a" required></select></label><p id="record-a-info" class="helper"></p><a id="upload-a" target="_blank" rel="noopener">上传 / 核对 A 的截图</a></div>
 <div><h3 id="label-b">视频 B</h3><label class="field"><span>B 发布时间（北京时间）</span><input id="published-b" type="datetime-local" required></label><label class="field"><span>B 已核对的截图</span><select id="record-b" required></select></label><p id="record-b-info" class="helper"></p><a id="upload-b" target="_blank" rel="noopener">上传 / 核对 B 的截图</a></div>
@@ -34,6 +38,6 @@
 </details><details id="missing-data"><summary>找不到 A 或 B 在指定时点的数据？</summary><p class="helper">过了采集时点，当前累计值不能还原当时数据。本轮可以留作 B 的基线，下次按计划截取数据。</p><label class="field"><span>缺少什么，下一次怎么采集</span><textarea id="missing-reason" maxlength="5000" placeholder="例如 A 没有发布后 24 小时截图；本轮仅保存 B 的基线，下次两条都在 24 小时截图。"></textarea></label><button id="defer-comparison" class="secondary" type="button">记录缺数据，暂不比较</button></details>
 </section>
 <section id="comparison-result" class="cycle-card" hidden></section>
-<form id="decision-form" class="cycle-card" hidden><h2>每条建议，决定下一步怎么用</h2><p class="helper">这是你的创作决定，不是平台认定改动有效。数据不足时只能选择“暂不能判断”。</p><div id="decision-items"></div><button class="primary" type="submit">保存总结与下一步行动</button></form>
+</details><form id="decision-form" class="cycle-card" hidden><h2>每条建议，决定下一步怎么用</h2><p class="helper">这是你的创作决定，不是平台认定改动有效。数据不足时只能选择“暂不能判断”。</p><div id="decision-items"></div><button class="primary" type="submit">保存总结与下一步行动</button></form>
 <section id="next-round" class="cycle-card" hidden><h2>继续下一轮</h2><div id="decisions-summary"></div><p>先复盘 B 并提交人工复核，再从 B 的建议中选择下一轮的 1～2 条。上一轮记录会保留关联。</p><div class="row"><a id="review-b">复盘 B →</a><a id="continue-cycle">从 B 的已提交复核开启下一轮 →</a></div></section>
-</section></main><script defer src="/workspace.js"></script></body></html>
+</section></main><script defer src="/workspace.js"></script><script defer src="/chain.js"></script></body></html>

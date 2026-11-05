@@ -3,19 +3,19 @@
 let flowStep=0,bReview=null,bPending=null;
 const flowDescriptions=['先完成 A 的复盘与人工复核。','只挑值得试的 1～2 条，写成下一条的行动。','按清单创作 B，在这里登记、复盘并记录采用情况。','核对两边的数据，再决定下一条继续怎么做。'];
 const originalRender=render;
-render=function(){originalRender();bReview=null;bPending=null;localStorage.setItem('review-active-cycle',current.id);flowStep=current.target?3:2;syncFlow();refreshBReview();restoreWorkMaterials();};
+render=function(){originalRender();bReview=null;bPending=null;localStorage.setItem('review-active-cycle',current.id);flowStep=current.target?3:2;syncFlow();refreshBReview();restoreWorkMaterials();if(window.ChainOverview)window.ChainOverview.load(current.id);$('single-round').open=query.get('round')==='1'||!current.comparison||current.comparison.result.status!=='ready';};
 async function restoreWorkMaterials(){if(!current?.target||current.comparison)return;const id=current.id;try{const bindings=await Promise.all([current.source.sample_id,current.target.sample_id].map(s=>api('/api/samples/materials?sample='+encodeURIComponent(s))));if(current?.id!==id||current.comparison)return;for(const [i,side] of ['a','b'].entries()){const input=$('record-'+side);if(!input.value&&bindings[i].metrics_record_id){input.value=bindings[i].metrics_record_id;showRecord(side);}}}catch(e){message('作品材料未能自动带入：'+e.message);}}
 function syncFlow(){
   const editing=!$('inline-work').hidden;
   $('flow-description').textContent=flowDescriptions[flowStep];
-  for(const button of document.querySelectorAll('[data-step]')){const n=Number(button.dataset.step);button.classList.toggle('active',n===flowStep);button.setAttribute('aria-current',n===flowStep?'step':'false');button.disabled=(n>1&&!current)||(n===3&&!current?.target);}
+  for(const button of document.querySelectorAll('[data-step]')){const n=Number(button.dataset.step);button.classList.toggle('active',n===flowStep);button.setAttribute('aria-current',n===flowStep?'step':'false');button.disabled=(n>1&&!current);}
   $('prepare-a').hidden=flowStep!==0||editing;
   $('create-cycle').hidden=!!current||flowStep!==1||editing;
   $('cycle-detail').hidden=!current||flowStep<1||editing;
   $('exit-cycle').hidden=!current;
   $('exit-cycle').textContent=current&&['decided','closed'].includes(current.status)?'开始新的循环':'结束本轮，重新开始';
   if(!current)return;
-  const closed=['decided','closed'].includes(current.status);
+  const closed=['decided','closed'].includes(current.status);$('chain-overview').hidden=flowStep!==3;$('single-round').hidden=flowStep!==3;
   $('b-review-panel').hidden=flowStep!==2||closed||!!bReview;
   $('implementation-form').hidden=flowStep!==2||closed;
   $('execution-items').hidden=!bReview;

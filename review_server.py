@@ -16,9 +16,10 @@ from workflow_logs import WorkflowLogs, RequestLog
 from workflow_jobs import JobStore
 from screenshot_metrics import ScreenshotStore
 from creation_cycles import CycleStore
+from chain_overview import overview
 
 STATIC = {"/": "index.html", "/app.js": "app.js", "/tasks.js": "tasks.js", "/style.css": "style.css",
-          "/cycles": "cycles.html", "/cycles.js": "cycles.js", "/workspace.js": "workspace.js", "/embedded.css": "embedded.css", "/cycles.css": "cycles.css",
+          "/cycles": "cycles.html", "/cycles.js": "cycles.js", "/chain.js": "chain.js", "/workspace.js": "workspace.js", "/embedded.css": "embedded.css", "/cycles.css": "cycles.css",
           "/metrics": "metrics.html", "/metrics.js": "metrics.js", "/metrics.css": "metrics.css",
           "/logs": "logs.html", "/logs.js": "logs.js", "/logs.css": "logs.css",
           "/start": "start.html", "/start.js": "start.js", "/start.css": "start.css"}
@@ -27,7 +28,7 @@ LOGGED_ROUTES = set(STATIC) | {"/api/health", "/api/session", "/api/runs", "/api
     "/api/tasks/create", "/api/tasks/save", "/api/logs", "/api/logs/run", "/api/logs/requests",
     "/api/samples", "/api/samples/register", "/api/samples/materials", "/api/jobs", "/api/jobs/detail", "/api/jobs/plan", "/api/jobs/start",
     "/api/metrics", "/api/metrics/detail", "/api/metrics/image", "/api/metrics/upload", "/api/metrics/recognize", "/api/metrics/confirm",
-    "/api/cycles", "/api/cycles/source", "/api/cycles/sources", "/api/cycles/detail", "/api/cycles/report",
+    "/api/cycles", "/api/cycles/chain", "/api/cycles/source", "/api/cycles/sources", "/api/cycles/detail", "/api/cycles/report",
     "/api/cycles/create", "/api/cycles/implement", "/api/cycles/compare", "/api/cycles/defer", "/api/cycles/decide", "/api/cycles/close"}
 
 
@@ -102,6 +103,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send({"token": self.server.token})
             if route.path == '/api/cycles':
                 return self.send(self.server.cycles.listing())
+            if route.path == '/api/cycles/chain':
+                return self.send(overview(self.server.cycles,query.get('id',[''])[0],float(query['hours'][0]) if 'hours' in query else None))
             if route.path == '/api/cycles/sources':
                 return self.send(self.server.cycles.sources())
             if route.path == '/api/cycles/source':
