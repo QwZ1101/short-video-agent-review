@@ -8,7 +8,7 @@ async function restoreWorkMaterials(){if(!current?.target||current.comparison)re
 function syncFlow(){
   const editing=!$('inline-work').hidden;
   $('flow-description').textContent=flowDescriptions[flowStep];
-  for(const button of document.querySelectorAll('[data-step]')){const n=Number(button.dataset.step);button.classList.toggle('active',n===flowStep);button.setAttribute('aria-current',n===flowStep?'step':'false');button.disabled=(n>1&&!current);}
+  for(const button of document.querySelectorAll('[data-step]')){const n=Number(button.dataset.step);button.classList.toggle('active',n===flowStep);button.setAttribute('aria-current',n===flowStep?'step':'false');button.disabled=(n>1&&!current)||(n===3&&!current?.target);}
   $('prepare-a').hidden=flowStep!==0||editing;
   $('create-cycle').hidden=!!current||flowStep!==1||editing;
   $('cycle-detail').hidden=!current||flowStep<1||editing;
@@ -16,8 +16,11 @@ function syncFlow(){
   $('exit-cycle').textContent=current&&['decided','closed'].includes(current.status)?'开始新的循环':'结束本轮，重新开始';
   if(!current)return;
   const closed=['decided','closed'].includes(current.status);
-  $('b-review-panel').hidden=flowStep!==2||closed;
+  $('b-review-panel').hidden=flowStep!==2||closed||!!bReview;
   $('implementation-form').hidden=flowStep!==2||closed;
+  $('execution-items').hidden=!bReview;
+  $('confirm-b').hidden=!bReview;
+  $('adoption-help').hidden=!bReview;
   $('compare-gate').hidden=flowStep!==3||!!bReview||closed;
   $('comparison-section').hidden=flowStep!==3||!current.target||(!bReview&&!closed)||closed;
   $('comparison-result').hidden=flowStep!==3||!current.comparison;
@@ -27,10 +30,18 @@ function syncFlow(){
   else $('review-b').hidden=false;
 }
 async function refreshBReview(){
-  if(!current?.target){bReview=null;syncFlow();return;}
-  const target=current.target.sample_id,id=current.id;
-  try{const [sources,all]=await Promise.all([api('/api/cycles/sources'),api('/api/runs')]);if(current?.id!==id||current.target?.sample_id!==target)return;bReview=sources.runs.find(r=>r.sample_id===target)||null;bPending=all.runs.find(r=>r.sample_id===target)||null;$('b-review-status').textContent=bReview?'B 已提交人工复核，可以进入数据比较。':bPending?'B 的分析已完成，直接打开人工复核即可。':'B 还没有复盘记录，在这里启动分析后完成核对。';syncFlow();}catch(e){message(e.message);}
+  const target=$('target-sample').value;
+  bReview=null;bPending=null;syncFlow();
+  if(!current||!target){$('b-review-status').textContent='选择已有作品 B，或登记下一条新作品。';$('open-b-review').textContent='登记作品 B';return;}
+  const id=current.id;
+  try{const all=await api('/api/runs');const latest=all.runs.find(r=>r.sample_id===target)||null;const detail=latest?await api('/api/review?run='+encodeURIComponent(latest.id)):null;if(current?.id!==id||$('target-sample').value!==target)return;bPending=latest;bReview=detail&&!detail.goal_changed&&['accepted','needs_evidence'].includes(detail.feedback.status)?latest:null;$('b-review-status').textContent=bReview?'B 已完成复核，请确认下面清单的采用情况。':bPending?'已有复盘结果，继续人工复核即可。':'材料会随作品带入；开始复盘后按提示核对结果。';$('open-b-review').textContent=bPending?'继续复核作品 B':'复盘作品 B';
+    if(current.target&&bReview&&flowStep===2){flowStep=3;}syncFlow();
+  }catch(e){message(e.message);}
 }
+$('target-sample').onchange=()=>{
+  if($('target-sample').value!==current?.target?.sample_id)for(const item of current.items){$('applied-'+item.finding_id).value='';$('note-'+item.finding_id).value=item.planned_change;}
+  refreshBReview();
+};
 function goStep(step){if(!$('inline-work').hidden){message('请先点击“完成，返回本轮”，以免丢失正在填写的内容。');return;}flowStep=step;if(step===0&&current){openWork('/?run='+encodeURIComponent(current.source.run),'查看 A 的人工复核');return;}syncFlow();}
 for(const button of document.querySelectorAll('[data-step]'))button.onclick=()=>goStep(Number(button.dataset.step));
 function openWork(url,title){const target=new URL(url,location.origin);if(['/start','/metrics'].includes(target.pathname))target.searchParams.set('embed','1');$('inline-title').textContent=title;$('inline-work').hidden=false;$('work-frame').src=target.href;syncFlow();$('inline-work').scrollIntoView({behavior:'smooth',block:'start'});}
@@ -47,13 +58,14 @@ $('open-a').onclick=()=>openWork('/start'+(parent?.target?'?sample='+encodeURICo
 $('choose-a').onclick=()=>{goStep(1);reloadSources();};
 $('open-b-review').onclick=()=>{const reviewed=bReview||bPending,sample=$('target-sample').value||current?.target?.sample_id;openWork(reviewed?'/?run='+encodeURIComponent(reviewed.id):'/start'+(sample?'?sample='+encodeURIComponent(sample):''),'复盘视频 B');};
 $('back-b-review').onclick=()=>{goStep(2);$('open-b-review').click();};
-async function reloadSources(){const data=await api('/api/cycles/sources'),selected=$('source-run').value;$('source-run').replaceChildren(new Option('选择 A 的已提交复核',''));for(const r of data.runs.filter(r=>!parent||r.sample_id===parent.target.sample_id))$('source-run').add(new Option(`${r.sample_id} · ${r.id}`,r.id));if(selected)$('source-run').value=selected;}
+async function reloadSources(){const data=await api('/api/cycles/sources'),selected=$('source-run').value;fillSourceChoices(data.runs.filter(r=>!parent||r.sample_id===parent.target.sample_id),selected);if(!current&&$('source-run').value)await loadSource();}
 $('return-work').onclick=async()=>{
   const frame=$('work-frame'),doc=frame.contentDocument;
   // Ask the embedded application whether it has unsaved input before leaving its form.
   if(doc){const event=new frame.contentWindow.Event('beforeunload',{cancelable:true});if(!frame.contentWindow.dispatchEvent(event)){message('内页还有未保存内容，请先保存或提交，再返回本轮。');return;}}
   const chosen=doc?.querySelector('#samples')?.value, reviewed=doc?.querySelector('#runs')?.value;
-  $('inline-work').hidden=true;if(current&&flowStep===0)flowStep=1;
+  if(!current&&reviewed){try{await api('/api/cycles/source?run='+encodeURIComponent(reviewed));}catch(e){message('请先在内页提交人工复核，再挑选下一条建议。'+e.message);return;}}
+  message('');$('inline-work').hidden=true;if(current&&flowStep===0)flowStep=1;
   try{await reloadSources();if(current){await refreshAvailableRecords();if(chosen&&chosen!==current.source.sample_id)$('target-sample').value=chosen;await refreshBReview();}else{flowStep=1;const runs=(await api('/api/cycles/sources')).runs.filter(r=>!chosen||r.sample_id===chosen);if(runs.length){$('source-run').value=runs[0].id;await loadSource();}}
     if(!current&&reviewed&&Array.from($('source-run').options).some(o=>o.value===reviewed)){$('source-run').value=reviewed;await loadSource();}
   }catch(e){message(e.message);}syncFlow();

@@ -6,6 +6,17 @@ const decisionNames={keep:'继续保留',retry:'再试一条',drop:'暂不采用
 let source=null,current=null,records=[],samples=[],dirty=false,busy=false,sourceVersion=0,parent=null;
 let refreshingOptions=null;
 function node(tag,text,cls){const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;}
+function workTitle(id){return samples.find(s=>s.sample_id===id)?.title||id;}
+function sourceChoices(runs,preferred=''){
+  const chosen=runs.find(r=>r.id===preferred),ordered=chosen?[chosen,...runs.filter(r=>r.id!==preferred)]:runs;
+  const seen=new Set();return ordered.filter(r=>{if(seen.has(r.sample_id))return false;seen.add(r.sample_id);return true;});
+}
+function fillSourceChoices(runs,preferred=''){
+  const choices=sourceChoices(runs,preferred);$('source-run').replaceChildren(new Option('选择作品 A',''));
+  for(const r of choices)$('source-run').add(new Option(workTitle(r.sample_id),r.id));
+  if(choices.some(r=>r.id===preferred))$('source-run').value=preferred;
+  else if(choices.length===1)$('source-run').value=choices[0].id;
+}
 function message(value){$('cycle-message').textContent=value;}
 async function api(path,body){
   const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),20000);
@@ -24,20 +35,20 @@ function base(){return {id:current.id,revision:current.revision};}
 function existingChoice(){return !dirty||confirm('还有未保存的内容，确定切换吗？');}
 async function listCycles(){const list=await api('/api/cycles');$('cycle-picker').replaceChildren(new Option('新建计划',''));for(const c of list.records)$('cycle-picker').add(new Option(`${c.title} · ${statusNames[c.status]}`,c.id));if(current)$('cycle-picker').value=current.id;if(list.unreadable)message(`${list.unreadable} 条旧记录校验未通过，未混入当前列表。`);}
 async function options(){const data=await api('/api/samples');samples=data.samples;records=(await api('/api/metrics')).records.filter(r=>r.status==='confirmed');}
-function fillSamples(preferred){const previous=preferred??current.target?.sample_id??'';$('target-sample').replaceChildren(new Option('请选择已登记的视频 B',''));for(const s of samples.filter(s=>s.sample_id!==current.source.sample_id))$('target-sample').add(new Option(`${s.sample_id} · ${s.goal}`,s.sample_id));$('target-sample').value=previous;}
+function fillSamples(preferred){const previous=preferred??current.target?.sample_id??'';$('target-sample').replaceChildren(new Option('请选择已登记的视频 B',''));for(const s of samples.filter(s=>s.sample_id!==current.source.sample_id))$('target-sample').add(new Option(workTitle(s.sample_id),s.sample_id));$('target-sample').value=previous;}
 function fillRecords(side,sample,preferred){const input=$('record-'+side),previous=preferred||input.value;input.replaceChildren(new Option('请选择已核对记录',''));for(const r of records){const c=r.confirmation;if(!c.sample_id||c.sample_id===sample)input.add(new Option(`${c.title} · ${c.observed_at}`,r.id));}input.value=previous;showRecord(side);}
 function showRecord(side){const r=records.find(r=>r.id===$('record-'+side).value),published=$('published-'+side);if(r&&published.dataset.record!==r.id){published.value=localDate(r.confirmation.published_at);published.dataset.record=r.id;}$('record-'+side+'-info').textContent=r?`统计时间 ${r.confirmation.observed_at}；范围：${{unknown:'不确定',cumulative:'截至截图累计',period:'指定时段'}[r.confirmation.scope]}；播放 ${r.confirmation.normalized.plays??'未知'}，点赞 ${r.confirmation.normalized.likes??'未知'}。`:'';}
-async function loadSource(){const version=++sourceVersion;source=null;$('suggestions').replaceChildren();$('source-goal').textContent='';if(!$('source-run').value)return;try{const result=await api('/api/cycles/source?run='+encodeURIComponent($('source-run').value));if(version!==sourceVersion)return;source=result;$('source-goal').textContent=`A：${source.sample_id}；目标：${source.goal}`;for(const f of source.findings){const card=node('div',undefined,'suggestion');const check=node('label',undefined,'check'),input=node('input');input.type='checkbox';input.id='pick-'+f.id;check.append(input,document.createTextNode(f.suggestion));const change=field('在 B 中具体怎么做','change-'+f.id);change.querySelector('textarea').placeholder='写可执行动作，例如：前 2 秒先展示粒子成品，再讲如何生成。';card.append(check,change);$('suggestions').append(card);}if(!source.findings.length)$('suggestions').append(node('p','这份复核没有可选建议。'));}catch(e){message(e.message);}}
+async function loadSource(){const version=++sourceVersion;source=null;$('suggestions').replaceChildren();$('source-goal').textContent='';if(!$('source-run').value)return;try{const result=await api('/api/cycles/source?run='+encodeURIComponent($('source-run').value));if(version!==sourceVersion)return;source=result;$('source-goal').textContent=`作品 A：${workTitle(source.sample_id)}；目标：${source.goal}`;for(const f of source.findings){const card=node('div',undefined,'suggestion');const check=node('label',undefined,'check'),input=node('input');input.type='checkbox';input.id='pick-'+f.id;check.append(input,document.createTextNode(f.suggestion));const change=field('在 B 中具体怎么做','change-'+f.id);change.querySelector('textarea').placeholder='写可执行动作，例如：前 2 秒先展示粒子成品，再讲如何生成。';card.append(check,change);$('suggestions').append(card);}if(!source.findings.length)$('suggestions').append(node('p','这份复核没有可选建议。'));}catch(e){message(e.message);}}
 function render(){
   dirty=false;$('create-cycle').hidden=true;$('cycle-detail').hidden=false;$('cycle-picker').value=current.id;
   $('detail-title').textContent=current.title;$('cycle-status').textContent=statusNames[current.status];
-  $('plan-summary').textContent=`A：${current.source.sample_id}；目标：${current.source.goal}。主指标：${metricNames[current.primary_metric]}，期望${current.expected_direction==='increase'?'升高':'降低'}。统一看发布后 ${current.window_hours} 小时，容差 ${current.tolerance_minutes} 分钟。`;
+  $('plan-summary').textContent=`作品 A：${workTitle(current.source.sample_id)}；目标：${current.source.goal}。主指标：${metricNames[current.primary_metric]}，期望${current.expected_direction==='increase'?'升高':'降低'}。统一看发布后 ${current.window_hours} 小时，容差 ${current.tolerance_minutes} 分钟。`;
   $('planned-items').replaceChildren(...current.items.map(i=>node('li',i.planned_change)));
   $('cycle-report').href='/api/cycles/report?id='+current.id;$('lineage').textContent=current.parent_id?'已关联上一轮：'+current.parent_id:'';
   fillSamples();$('execution-items').replaceChildren();
-  for(const item of current.items){const e=current.target?.executions.find(e=>e.finding_id===item.finding_id);const group=node('section',undefined,'execution');group.append(node('h3',item.planned_change),selectField('B 中的采用情况','applied-'+item.finding_id,{not_applied:'未采用',partial:'部分采用',applied:'已采用'},e?.status||'not_applied'),field('实际做法 / 未采用原因','note-'+item.finding_id,e?.note||''));$('execution-items').append(group);}
+  for(const item of current.items){const e=current.target?.executions.find(e=>e.finding_id===item.finding_id);const group=node('section',undefined,'execution');group.append(node('h3',item.planned_change),selectField('B 中的采用情况','applied-'+item.finding_id,{'':'请确认采用情况',not_applied:'未采用',partial:'部分采用',applied:'已采用'},e?.status||''),field('实际做法 / 未采用原因','note-'+item.finding_id,e?.note??item.planned_change));group.querySelector('select').required=true;$('execution-items').append(group);}
   const target=current.target;$('comparison-section').hidden=!target;
-  if(target){$('label-a').textContent='视频 A · '+current.source.sample_id;$('label-b').textContent='视频 B · '+target.sample_id;$('window-instruction').textContent=`两边都需发布后 ${current.window_hours} 小时（± ${current.tolerance_minutes} 分钟）的累计截图；两边实际时长之差也不能超过该容差。`;
+  if(target){$('label-a').textContent='作品 A · '+workTitle(current.source.sample_id);$('label-b').textContent='作品 B · '+workTitle(target.sample_id);$('window-instruction').textContent=`两边都需发布后 ${current.window_hours} 小时（± ${current.tolerance_minutes} 分钟）的累计截图；两边实际时长之差也不能超过该容差。`;
     fillRecords('a',current.source.sample_id,current.comparison?.a?.source.record_id);fillRecords('b',target.sample_id,current.comparison?.b?.source.record_id);
     $('published-a').value=localDate(current.comparison?.published_a||records.find(r=>r.id===$('record-a').value)?.confirmation.published_at);$('published-b').value=localDate(current.comparison?.published_b||records.find(r=>r.id===$('record-b').value)?.confirmation.published_at);
     $('confounders').value=current.comparison?.confounders||'';$('screenshots-match').checked=!!current.comparison?.screenshots_match;$('same-goal').checked=!!current.comparison?.same_goal_confirmed;
@@ -51,7 +62,7 @@ function render(){
   if(target){$('review-b').href='/start?sample='+encodeURIComponent(target.sample_id);$('continue-cycle').href='/cycles?parent='+current.id;}
   history.replaceState(null,'','/cycles?id='+current.id);
 }
-function renderComparison(){const box=$('comparison-result');box.replaceChildren();box.hidden=!current.comparison;if(box.hidden)return;const c=current.comparison,r=c.result;box.append(node('h2',r.status==='ready'?'对比结果 · 描述变化，留待判断':'暂不能比较'));
+function renderComparison(){$('comparison-inputs').open=!current.comparison||current.comparison.result.status!=='ready';const box=$('comparison-result');box.replaceChildren();box.hidden=!current.comparison;if(box.hidden)return;const c=current.comparison,r=c.result;box.append(node('h2',r.status==='ready'?'对比结果 · 描述变化，留待判断':'暂不能比较'));
   for(const reason of r.reasons)box.append(node('p',reason,'blocked'));
   if(r.retrospective)box.append(node('p','回顾性比较：B 在计划登记前已经发布，本轮不能算作预先设计的试验。','boundary'));
   if(r.actual_hours)box.append(node('p',`实际观察：A ${r.actual_hours.a} 小时；B ${r.actual_hours.b} 小时。`,'helper'));
@@ -73,7 +84,7 @@ async function refreshAvailableRecords(announce=false){
   if(!current||busy)return;
   if(refreshingOptions)return refreshingOptions;
   const cycleId=current.id,choice=$('target-sample').value;
-  refreshingOptions=(async()=>{try{await options();if(current?.id!==cycleId)return;fillSamples(choice);if(current.target){fillRecords('a',current.source.sample_id);fillRecords('b',current.target.sample_id);}if(announce)message('视频和已核对截图列表已更新；填写内容已保留。');}catch(e){message('截图列表更新失败：'+e.message+' 可点击“刷新已核对截图”重试。');}finally{refreshingOptions=null;}})();
+  refreshingOptions=(async()=>{try{await options();if(current?.id!==cycleId)return;fillSamples(choice);if(current.target){fillRecords('a',current.source.sample_id);fillRecords('b',current.target.sample_id);}if(typeof refreshBReview==='function')await refreshBReview();if(announce)message('作品与数据已更新，可以继续当前步骤。');}catch(e){message('截图列表更新失败：'+e.message+' 可点击“刷新已核对截图”重试。');}finally{refreshingOptions=null;}})();
   return refreshingOptions;
 }
 $('refresh-options').onclick=()=>refreshAvailableRecords(true);
@@ -85,8 +96,8 @@ for(const side of ['a','b'])$('record-'+side).onchange=()=>showRecord(side);
 document.addEventListener('input',e=>{if(e.target.closest('form'))dirty=true;});document.addEventListener('change',e=>{if(e.target.closest('form'))dirty=true;});
 window.addEventListener('beforeunload',e=>{if(dirty){e.preventDefault();e.returnValue='';}});
 (async()=>{try{await options();await listCycles();if(query.get('parent')){parent=await api('/api/cycles/detail?id='+encodeURIComponent(query.get('parent')));if(parent.status!=='decided')throw new Error('请先完成上一轮总结');$('parent-note').textContent='上一轮行动：'+parent.decisions.map(d=>decisionNames[d.decision]+'：'+d.note).join('；');}
-  const runs=(await api('/api/cycles/sources')).runs.filter(r=>!parent||r.sample_id===parent.target.sample_id);for(const r of runs)$('source-run').add(new Option(`${r.sample_id} · ${r.id}`,r.id));
+  const runs=(await api('/api/cycles/sources')).runs.filter(r=>!parent||r.sample_id===parent.target.sample_id);fillSourceChoices(runs,query.get('run')||'');
   if(!runs.length)message(parent?'B 还没有已提交复核，请先复盘 B 并完成人工复核。':'请先完成一条视频的人工复核，再制定下一条计划。');
-  if(query.get('run')){$('source-run').value=query.get('run');await loadSource();}
+  if($('source-run').value)await loadSource();
   if(query.get('id')){current=await api('/api/cycles/detail?id='+encodeURIComponent(query.get('id')));render();}
 }catch(e){message(e.message);}})();

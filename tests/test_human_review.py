@@ -54,6 +54,15 @@ class HumanReviewTests(unittest.TestCase):
         self.assertEqual(detail["status"], "awaiting_human_review")
         self.assertNotIn("reviewed_result", detail["feedback"])
 
+    def test_latest_review_is_sorted_by_time_not_random_run_identifier(self):
+        for name,stamp in [('run-zz-old','2026-01-01T00:00:00+00:00'),('run-aa-new','2026-11-04T00:00:00+00:00')]:
+            folder=self.root.parent/name;folder.mkdir()
+            atomic_json(folder/'workflow.json',dict(sample_id='test',status='awaiting_human_review',mode='live',started_at=stamp))
+            atomic_json(folder/'human-review.json',{})
+        rows=self.store.list_runs()['runs']
+        ids=[r['id'] for r in rows]
+        self.assertLess(ids.index('run-aa-new'),ids.index('run-zz-old'))
+
     def test_changed_goal_is_marked_without_rewriting_historical_task(self):
         before = digest(self.root / "verification/evidence-catalog.json")
         sample = self.workspace / "data/samples/test.json"

@@ -144,9 +144,11 @@ class ReviewStore:
                     # 列表只展示，完整的来源校验与中断恢复在打开任务时执行。
                     status = read_json(root / "human-feedback.json")["status"]
                     state["status"] = "human_reviewed" if status == "accepted" else "awaiting_human_review"
-                rows.append({"id": root.name, "sample_id": state["sample_id"], "status": state["status"], "mode": state["mode"]})
+                rows.append({"id": root.name, "sample_id": state["sample_id"], "status": state["status"], "mode": state["mode"],
+                             "started_at": state.get('started_at') if isinstance(state.get('started_at'),str) else ''})
             except (OSError, ValueError, KeyError):
                 continue
+        rows.sort(key=lambda row: row['started_at'], reverse=True)
         latest = self.runs / "latest.json"
         selected = Path(read_json(latest)["run_dir"]).name if latest.exists() else None
         return {"runs": rows, "selected": selected}

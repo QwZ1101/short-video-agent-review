@@ -104,7 +104,7 @@ class JobStore:
                 sample = load_sample(self.sample_path(path.stem))
                 if sample["sample_id"] != path.stem:
                     raise ValueError("样本编号与文件名不一致")
-                result.append({"sample_id": sample["sample_id"], "goal": sample["tutorial_goal"],
+                result.append({"sample_id": sample["sample_id"], "title": Path(sample['video']['path']).stem, "goal": sample["tutorial_goal"],
                                "audience": sample["audience"], "goal_revision": sample.get("goal_revision")})
             except (OSError, ValueError, KeyError, TypeError):
                 unreadable += 1

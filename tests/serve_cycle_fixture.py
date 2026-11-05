@@ -29,8 +29,18 @@ try:
     state=new_state('replay',0,'test-b')
     paths=run_replay(b,state,source);create_handoff(b,state,paths)
     # Leave B unreviewed so browser acceptance performs its human review step.
-    a=fixture.screenshot('test')
-    b=fixture.screenshot('test-b',likes='60')
+    import base64
+    def published_metric(sample,likes):
+        original=fixture.screenshot(sample,likes=likes)
+        image,_=fixture.store.metrics.image(original['id'])
+        uploaded=fixture.store.metrics.upload({'image_base64':base64.b64encode(image.read_bytes()).decode()})
+        confirmation=original['confirmation']
+        payload={k:confirmation[k] for k in ('reviewed','title','sample_id','observed_at','scope','metrics','note')}
+        return fixture.store.metrics.confirm(uploaded['id'],dict(payload,published_at='2026-10-31T12:00:00+08:00'))
+    a=published_metric('test','40')
+    b=published_metric('test-b','60')
+    for sample,record in [('test',a),('test-b',b)]:
+        fixture.store.jobs.materials(sample,dict(sample_id=sample,revision=0,metrics_record_id=record['id'],match_confirmed=True))
     server=ReviewServer(workspace=root)
     details=dict(url='http://127.0.0.1:%s'%server.server_port,workspace=str(root),record_a=a['id'],record_b=b['id'])
     Path(sys.argv[1]).write_text(json.dumps(details,indent=2),encoding='utf-8')

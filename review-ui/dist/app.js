@@ -3,7 +3,7 @@ const $ = id => document.getElementById(id);
 const labels = {observation:'观察到的情况', interpretation:'可能的影响', suggestion:'下一条建议怎么做', validation_plan:'下一条如何观察效果'};
 const decisions = {pending:'待复核',accept:'保留候选稿',revise:'修改后采用',unsure:'暂不确定'};
 const statuses = {awaiting_human_review:'等待人工复核',human_reviewed:'人工复核已提交'};
-let data, feedback, selected=0, token='', dirty=false, busy=false;
+let data, feedback, selected=0, token='', dirty=false, busy=false, workTitles={};
 function showView(view){
   $('review-view').hidden=view!=='review';$('tasks-view').hidden=view!=='tasks';
   $('view-review').setAttribute('aria-pressed',String(view==='review'));
@@ -129,7 +129,8 @@ async function loadRun(identifier,selectedIndex=0){
   try{
     data=await api('/api/review?run='+encodeURIComponent(identifier));feedback=structuredClone(data.feedback);selected=Math.min(selectedIndex,feedback.findings.length);dirty=false;
     const restored=restoreBackup();
-    $('runs').value=data.id;$('sample').textContent=data.sample_id+' / '+({verify:'复用分析 · 新验证',live:'完整运行',replay:'历史结果回放',resume:'恢复验证',refine:'受控返修'}[data.mode]||data.mode);
+    $('runs').value=data.id;$('sample').textContent=workTitles[data.sample_id]||data.sample_id;
+    $('trace-ids').textContent='作品编号：'+data.sample_id+' · 运行编号：'+data.id+' · 模式：'+data.mode;
     $('goal').textContent=data.goal_changed?data.current_goal:data.task.tutorial_goal;$('audience').textContent=data.goal_changed?'下方为旧目标历史报告：'+data.task.tutorial_goal:'目标观众：'+(data.task.audience_prior_knowledge||data.task.audience||'未提供');
     $('status').textContent=feedback.status==='needs_evidence'?'等待补充证据':statuses[data.status]||data.status;
     if(data.refinement?.status==='awaiting_evidence'&&!locked())$('status').textContent='等待补证 / 人工复核';
@@ -170,8 +171,8 @@ $('runs').onchange=()=>{const next=$('runs').value;if((dirty||window.TaskBoard.i
 $('save').onclick=()=>save(false);$('submit').onclick=()=>save(true);
 $('view-review').onclick=()=>showView('review');$('view-tasks').onclick=()=>showView('tasks');
 window.addEventListener('beforeunload',event=>{if(dirty||window.TaskBoard.isDirty()){event.preventDefault();event.returnValue='';}});
-(async()=>{try{token=(await api('/api/session')).token;const list=await api('/api/runs');$('runs').replaceChildren();
-  for(const run of list.runs){const option=el('option',run.sample_id+' · '+run.id.replace(/^(run|resume)-/,''));option.value=run.id;$('runs').append(option);}
+(async()=>{try{token=(await api('/api/session')).token;const [list,works]=await Promise.all([api('/api/runs'),api('/api/samples')]);workTitles=Object.fromEntries(works.samples.map(s=>[s.sample_id,s.title||s.sample_id]));$('runs').replaceChildren();
+  for(const run of list.runs){const option=el('option',(workTitles[run.sample_id]||run.sample_id)+(run.started_at?' · '+new Date(run.started_at).toLocaleString('zh-CN'):''));option.value=run.id;$('runs').append(option);}
   if(!list.runs.length){$('loading').hidden=true;message('还没有可以复核的任务。请先完成内容分析与证据验证。');return;}
   const requested=new URLSearchParams(location.search).get('run');
   await loadRun(list.runs.some(x=>x.id===requested)?requested:list.runs.some(x=>x.id===list.selected)?list.selected:list.runs[0].id);
