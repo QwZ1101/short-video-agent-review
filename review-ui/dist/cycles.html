@@ -19,9 +19,10 @@
 <section id="cycle-detail" hidden>
 <details id="round-plan" class="cycle-card"><summary><span id="detail-title"></span><span id="cycle-status" class="badge"></span></summary><p id="plan-summary"></p><ol id="planned-items"></ol><a id="cycle-report" target="_blank" rel="noopener">查看完整记录 ↗</a><p id="lineage" class="helper"></p></details>
 <form id="implementation-form" class="cycle-card"><h2>选择下一条视频</h2>
+<p id="locked-chain-goal" class="helper"></p>
 <label class="field"><span>作品 B</span><select id="target-sample" required></select></label>
 <div id="b-review-panel"><p id="b-review-status" class="helper">选择作品后自动查找已有复盘。</p><button id="open-b-review" type="button" class="primary">登记作品 B</button></div>
-<details id="target-tools"><summary>更换或登记其他视频</summary><div class="row"><a id="register-b" href="/start">登记新视频</a><button id="refresh-options" class="secondary" type="button">更新列表</button></div></details>
+<details id="target-tools"><summary>更换或登记其他视频</summary><div class="row"><a id="register-b" href="/start?register=1">登记新视频</a><button id="refresh-options" class="secondary" type="button">更新列表</button></div></details>
 <p id="adoption-help" class="helper">清单已带入下方，确认是否采用即可；实际做法不同时再修改。效果留到下一步比较。</p>
 <div id="execution-items"></div><button id="confirm-b" class="primary" type="submit">确认采用，比较数据</button><p class="helper">更换 B 或修改采用记录，会清空本轮当前对比；旧版仍在历史中。</p></form>
 <details id="single-round" class="cycle-card"><summary>本轮比较与截图</summary><div id="compare-gate" class="cycle-card" hidden><h2>下一条视频待复核</h2><button id="back-b-review" class="primary" type="button">继续复核</button></div><section id="comparison-section" class="cycle-card" hidden><h2>核对两条视频的数据</h2>

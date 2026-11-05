@@ -47,6 +47,7 @@ function syncFlow(){
   $('cycle-detail').hidden=!current||flowStep<1||editing;
   $('exit-cycle').hidden=!current||closed;
   if(!current)return;
+  $('locked-chain-goal').textContent='创作链目标 · '+chainGoal(current);
   updateComparisonAction();
   $('chain-overview').hidden=!current.target&&!closed;
   $('single-round').hidden=flowStep!==3||(closed&&!current.comparison);
@@ -87,6 +88,11 @@ async function refreshBReview(){
   const request=++bReviewRequest;
   bReview=null;bPending=null;syncFlow();
   if(!current||!target){$('b-review-status').textContent='选择已有作品 B，或登记下一条新作品。';$('open-b-review').textContent='登记作品 B';return;}
+  if(samples.find(s=>s.sample_id===target)?.goal!==chainGoal(current)){
+    $('b-review-status').textContent='这条视频原先的目标不同。请换一条，或在本轮登记视频以沿用链路目标。';
+    $('open-b-review').textContent='按链路目标登记视频';
+    return;
+  }
   const id=current.id;
   try{const all=await api('/api/runs');const latest=all.runs.find(r=>r.sample_id===target)||null;const detail=latest?await api('/api/review?run='+encodeURIComponent(latest.id)):null;if(request!==bReviewRequest||current?.id!==id||$('target-sample').value!==target)return;bPending=latest;bReview=detail&&!detail.goal_changed&&['accepted','needs_evidence'].includes(detail.feedback.status)?latest:null;$('b-review-status').textContent=bPending?'已有复盘，打开后完成人工复核。':'复盘完成后，回来确认采用情况。';$('open-b-review').textContent=bPending?'继续人工复核':'开始复盘';
     syncFlow();
@@ -101,6 +107,7 @@ let workPurpose='',confirmedScreenshot=null;
 function openWork(url,title,purpose='inspect'){
   const target=new URL(url,location.origin);
   if(['/start','/metrics'].includes(target.pathname))target.searchParams.set('embed','1');
+  if(purpose==='target'&&target.pathname==='/start')target.searchParams.set('cycle',current.id);
   workPurpose=purpose;
   confirmedScreenshot=null;
   $('inline-title').textContent=title;
@@ -125,6 +132,7 @@ $('work-frame').onload=()=>{
       e.preventDefault();
       if(!canLeaveWork())return;
       if(['/start','/metrics'].includes(u.pathname))u.searchParams.set('embed','1');
+      if(workPurpose==='target'&&u.pathname==='/start'&&current)u.searchParams.set('cycle',current.id);
       $('work-frame').src=u.href;
     }});
   // Registration is already explicit; return the registered choice without another dropdown selection.
@@ -132,9 +140,15 @@ $('work-frame').onload=()=>{
 $('open-a').onclick=()=>openWork('/start','复盘视频 A','source');
 $('choose-a').onclick=()=>{goStep(1);reloadSources();};
 $('back-to-source').onclick=()=>{if(existingChoice())goStep(0);};
-$('open-b-review').onclick=()=>{const reviewed=bReview||bPending,sample=$('target-sample').value||current?.target?.sample_id;openWork(reviewed?'/?run='+encodeURIComponent(reviewed.id):'/start'+(sample?'?sample='+encodeURIComponent(sample):''),'复盘视频 B','target');};
+$('open-b-review').onclick=()=>{
+  const reviewed=bReview||bPending;
+  const sample=$('target-sample').value;
+  const useExisting=sample&&samples.find(s=>s.sample_id===sample)?.goal===chainGoal(current);
+  const url=reviewed?'/?run='+encodeURIComponent(reviewed.id):useExisting?'/start?sample='+encodeURIComponent(sample):'/start?register=1';
+  openWork(url,'复盘视频 B','target');
+};
 $('back-b-review').onclick=()=>{goStep(2);$('open-b-review').click();};
-async function reloadSources(preferred=$('source-run').value){const data=await api('/api/cycles/sources');fillSourceChoices(data.runs.filter(r=>!parent||r.sample_id===parent.target.sample_id),preferred);if(!current)await loadSource();}
+async function reloadSources(preferred=$('source-run').value){const data=await api('/api/cycles/sources');fillSourceChoices(eligibleSources(data.runs),preferred);if(!current)await loadSource();}
 function canLeaveWork(){
   const win=$('work-frame').contentWindow;
   if(win&&!win.dispatchEvent(new win.Event('beforeunload',{cancelable:true}))){
@@ -189,6 +203,17 @@ const suggestionObserver=new MutationObserver(()=>{for(const card of $('suggesti
 suggestionObserver.observe($('suggestions'),{childList:true});
 async function startPlan(previous=null){
   if(busy||!existingChoice())return;
+  if(previous){
+    try{
+      const {runs}=await api('/api/cycles/sources');
+      if(!runs.some(r=>r.sample_id===previous.target.sample_id&&r.goal===chainGoal(previous))){
+        message(previous.target.goal!==chainGoal(previous)
+          ?'这条历史视频的目标与创作链不同，不能用这份复核接续。可从「更多」开启新链。'
+          :'请先提交下一条视频的复核，并认可至少一条建议。');
+        return;
+      }
+    }catch(e){message(e.message);return;}
+  }
   current=null;
   parent=previous;
   source=null;

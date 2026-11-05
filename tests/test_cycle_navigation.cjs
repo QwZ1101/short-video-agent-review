@@ -9,7 +9,7 @@ test('embedded next-step links return to the workspace without navigating the pa
   const code=source.slice(start,source.indexOf('// Registration',start));
   let handler,returned=0,prevented=false;const frame={};
   const context=vm.createContext({URL,doc:{addEventListener:(type,fn)=>handler=fn},
-    location:{origin:'http://127.0.0.1:19433'},canLeaveWork:()=>true,
+    location:{origin:'http://127.0.0.1:19433'},canLeaveWork:()=>true,workPurpose:'inspect',
     $:id=>id==='return-work'?{click:()=>returned++}:frame});
   vm.runInContext(code,context);
   const click=href=>{prevented=false;handler({target:{closest:()=>({href})},preventDefault:()=>prevented=true});};
@@ -24,7 +24,7 @@ test('saving a first plan refreshes step availability after releasing busy contr
   const button={disabled:true,isConnected:true};let synced=false;
   const context=vm.createContext({document:{querySelectorAll:()=>[button]},api:async()=>({status:'planned'}),
     options:async()=>{},listCycles:async()=>{},render:()=>{button.disabled=false;},message:()=>{},
-    syncFlow:()=>{synced=true;button.disabled=false;}});
+    syncFlow:()=>{synced=true;}});
   vm.runInContext('let busy=false,current=null;',context);
   vm.runInContext(source.slice(start,source.indexOf("$('source-run').onchange",start)),context);
   await vm.runInContext("mutate('create',{})",context);

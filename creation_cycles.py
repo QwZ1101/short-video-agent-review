@@ -119,7 +119,7 @@ class CycleStore:
         for row in self.reviews.list_runs()['runs']:
             try:
                 source = self.source(row['id'])
-                records.append(dict(id=row['id'], sample_id=source['sample_id']))
+                records.append(dict(id=row['id'], sample_id=source['sample_id'], goal=source['goal']))
             except (ValueError, OSError, KeyError, TypeError):
                 continue
         return dict(runs=records)
@@ -160,6 +160,33 @@ class CycleStore:
         event(root, operation, revision=record['revision'], status=record['status'])
         return record
 
+    def locked_goal(self, record):
+        """Use the first round's submitted goal for this entire lineage."""
+        seen = set()
+        while record.get('parent_id'):
+            if record['id'] in seen or len(seen) >= 100:
+                raise ValueError('创作链包含循环引用或超过100轮')
+            seen.add(record['id'])
+            record = self.load(record['parent_id'])
+        return text(record['source']['goal'], '创作链目标', limit=8000)
+
+    def goal_context(self, identifier):
+        record = self.load(identifier)
+        return dict(goal=self.locked_goal(record), source_sample=record['source']['sample_id'])
+
+    def target_goal(self, identifier, sample_id=None):
+        record = self.load(identifier)
+        if record['status'] in ('decided', 'closed'):
+            raise ValueError('本轮已结束，请先继续下一轮')
+        goal = self.locked_goal(record)
+        if sample_id is not None:
+            if sample_id == record['source']['sample_id']:
+                raise ValueError('请选择不同于本轮起点的下一条视频')
+            sample = read_json(self.jobs.sample_path(sample_id))
+            if sample.get('tutorial_goal') != goal:
+                raise ValueError(f'这条视频的目标与创作链不一致。请选目标为「{goal}」的视频，或在本轮登记视频。')
+        return goal
+
     def create(self, payload):
         with LOCK:
             source = self.source(payload.get('source_run'))
@@ -185,15 +212,18 @@ class CycleStore:
             if payload.get('expected_direction') not in ('increase', 'decrease'):
                 raise ValueError('请选择主指标期望升高还是降低')
             parent = payload.get('parent_id') or None
+            goal = text(source['goal'], '创作链目标', limit=8000)
             if parent:
                 previous = self.load(parent)
                 if previous['status'] != 'decided' or previous['target']['sample_id'] != source['sample_id']:
                     raise ValueError('下一轮必须从已总结计划的视频 B 的复核开始')
+                if goal != self.locked_goal(previous):
+                    raise ValueError('接续视频的复核目标与创作链不一致，请使用目标一致的复核，或开启新链')
             record = dict(schema_version=1, id='cycle-' + uuid.uuid4().hex, revision=0, status='planned',
                 created_at=now(), title=text(payload.get('title'), '下一条的名称或题材', limit=300),
                 source=source, items=selected, window_hours=window, tolerance_minutes=tolerance,
                 primary_metric=payload['primary_metric'], expected_direction=payload['expected_direction'],
-                target=None, comparison=None, decisions=[], parent_id=parent)
+                target=None, comparison=None, decisions=[], parent_id=parent, chain_goal=goal)
             return self.commit(record, 'cycle_planned')
 
     def current(self, payload):
@@ -219,6 +249,8 @@ class CycleStore:
                 raise ValueError('这里记录下一条新视频 B，请选择不同于 A 的作品')
             path = self.jobs.sample_path(sample_id)
             sample = read_json(path)
+            if sample.get('tutorial_goal') != self.locked_goal(r):
+                raise ValueError('下一条视频的目标须与创作链一致，请在本轮登记视频或选择同目标作品')
             executions = payload.get('executions')
             expected = {i['finding_id'] for i in r['items']}
             if not isinstance(executions, list) or len(executions) != len(expected):

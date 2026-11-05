@@ -6,7 +6,7 @@
 <section class="intro"><div><div class="eyebrow">CREATE / PLAN / RUN</div><h1>从一条视频，开始复盘。</h1><p>登记材料，查看计划，再决定本轮运行的预算。</p></div><span class="badge">默认最多 4 次模型调用（含故障恢复）</span></section>
 <div id="message" role="status" aria-live="polite"></div>
 <section class="start-card">
-<h2>01 · 作品材料</h2><label class="field"><span>选择已登记作品</span><select id="samples"><option value="">正在读取…</option></select></label><p id="sample-goal" class="helper"></p>
+<h2>01 · 作品材料</h2><p id="start-chain-goal" class="helper" hidden></p><label class="field"><span>选择已登记作品</span><select id="samples"><option value="">正在读取…</option></select></label><p id="sample-goal" class="helper"></p>
 <details id="register-details"><summary>登记新作品</summary><form id="register-form">
 <label class="field"><span>样本编号（可选）</span><input name="sample_id" placeholder="例如 tutorial-003" pattern="[a-z][a-z0-9_-]{0,63}" maxlength="64"></label>
 <label class="field"><span>视频的本地完整路径</span><input name="video" required placeholder="D:\视频\作品.mp4" maxlength="2000"></label>

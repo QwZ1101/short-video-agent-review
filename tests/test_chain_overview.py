@@ -6,6 +6,7 @@ import test_creation_cycles as fixtures
 from create_sample import create_sample
 from chain_overview import overview
 from review_server import ReviewServer
+from workflow_jobs import JobStore
 
 
 class ChainTests(unittest.TestCase):
@@ -90,11 +91,28 @@ class ChainTests(unittest.TestCase):
         self.assertIsNone(node['values']['likes_per_100'])
 
     def test_goal_mismatch_does_not_enter_common_trend(self):
-        video=self.fixture.fixture.workspace/'c.mp4';video.write_bytes(b'synthetic')
-        create_sample(str(video),'another goal','viewers','none',sample_id='test-c',root=self.fixture.fixture.workspace)
-        self.compare_child(self.child())
+        historical = self.compare_child(self.child())
+        historical.pop('chain_goal', None)
+        historical['target']['goal'] = 'another goal'
+        self.store.commit(historical, 'legacy_test_fixture')
         node=overview(self.store,self.root['id'])['nodes'][-1]
         self.assertEqual(node['status'],'unaligned');self.assertIn('目标口径',node['reason'])
+
+    def test_chain_registers_with_root_goal_and_rejects_mismatch_before_plan(self):
+        workspace = self.fixture.fixture.workspace
+        jobs = JobStore(workspace, self.store.target_goal)
+        planned = self.store.create(dict(self.fixture.create, source_run='run-b', parent_id=self.root['id']))
+        video = workspace / 'new.mp4'
+        video.write_bytes(b'synthetic')
+        different = jobs.register(dict(video=str(video), goal='another goal', audience='viewers', prior_knowledge='none'))
+        with self.assertRaisesRegex(ValueError, '目标与创作链不一致'):
+            jobs.plan(dict(different, cycle_id=planned['id'], max_model_calls=2, max_repair_rounds=0))
+        self.assertEqual(list(jobs.folder.glob('job-*')), [])
+        with self.assertRaisesRegex(ValueError, '目标须与创作链一致'):
+            self.store.implement(dict(different, id=planned['id'], revision=planned['revision']))
+        same = jobs.register(dict(video=str(video), cycle_id=planned['id'], audience='viewers', prior_knowledge='none'))
+        self.assertEqual(jobs.samples()['samples'][-1]['goal'], self.root['source']['goal'])
+        self.assertEqual(self.store.target_goal(planned['id'], same['sample_id']), self.root['source']['goal'])
 
     def test_read_only_http_chain_endpoint_and_input_validation(self):
         server=ReviewServer(workspace=self.fixture.fixture.workspace)

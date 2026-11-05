@@ -13,6 +13,7 @@ function setup(overrides={}){
   const context=vm.createContext({$:get,saveMaterials:async()=>saved,api:async()=>({id:'planned-job',ready:true}),
     message:()=>{},showPlan:()=>{},refreshJobs:async()=>{},...overrides});
   vm.runInContext('let planning=false,launching=false,planned=null,requestVersion=0;',context);
+  context.cycleId=overrides.cycleId||null;
   vm.runInContext(handler,context);
   return {get,context,run:()=>get('plan').onclick()};
 }
@@ -20,6 +21,14 @@ test('backend rejection is shown beside preview and button is released for retry
   const ui=setup({api:async()=>{throw new Error('screenshot validation failed');}});
   await ui.run();assert.match(ui.get('plan-status').textContent,/screenshot validation failed/);
   assert.equal(ui.get('plan').disabled,false);assert.equal(vm.runInContext('planned',ui.context),null);
+});
+test('plans started inside a creation chain send the chain identifier',async()=>{
+  const ui=setup({cycleId:'cycle-test',api:async(path,body)=>{
+    assert.equal(body.cycle_id,'cycle-test');
+    return {id:'planned-job',ready:true};
+  }});
+  await ui.run();
+  assert.match(ui.get('plan-status').textContent,/启动本轮复盘/);
 });
 test('material save failure is visible before sending a plan request',async()=>{
   const ui=setup({saveMaterials:async()=>{throw new Error('missing material');},api:async()=>assert.fail('must not plan')});

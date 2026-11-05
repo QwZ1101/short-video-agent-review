@@ -7,6 +7,10 @@ let source=null,current=null,records=[],samples=[],dirty=false,busy=false,source
 let refreshingOptions=null;
 function node(tag,text,cls){const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;}
 function workTitle(id){return samples.find(s=>s.sample_id===id)?.title||id;}
+function chainGoal(record){return record.chain_goal??record.source.goal;}
+function eligibleSources(runs){
+  return parent?runs.filter(r=>r.sample_id===parent.target.sample_id&&r.goal===chainGoal(parent)):runs;
+}
 function sourceChoices(runs,preferred=''){
   const chosen=runs.find(r=>r.id===preferred),ordered=chosen?[chosen,...runs.filter(r=>r.id!==preferred)]:runs;
   const seen=new Set();return ordered.filter(r=>{if(seen.has(r.sample_id))return false;seen.add(r.sample_id);return true;});
@@ -35,7 +39,18 @@ function base(){return {id:current.id,revision:current.revision};}
 function existingChoice(){return !dirty||confirm('还有未保存的内容，确定切换吗？');}
 async function listCycles(){const list=await api('/api/cycles');$('cycle-picker').replaceChildren(new Option('新建计划',''));for(const c of list.records)$('cycle-picker').add(new Option(`${c.title} · ${statusNames[c.status]}`,c.id));if(current)$('cycle-picker').value=current.id;if(list.unreadable)message(`${list.unreadable} 条旧记录校验未通过，未混入当前列表。`);}
 async function options(){const data=await api('/api/samples');samples=data.samples;records=(await api('/api/metrics')).records.filter(r=>r.status==='confirmed');}
-function fillSamples(preferred){const previous=preferred??current.target?.sample_id??'';$('target-sample').replaceChildren(new Option('请选择已登记的视频 B',''));for(const s of samples.filter(s=>s.sample_id!==current.source.sample_id))$('target-sample').add(new Option(workTitle(s.sample_id),s.sample_id));$('target-sample').value=previous;}
+function fillSamples(preferred){
+  const previous=preferred??current.target?.sample_id??'';
+  const input=$('target-sample');
+  input.replaceChildren(new Option('请选择已登记的视频 B',''));
+  for(const sample of samples.filter(s=>s.sample_id!==current.source.sample_id)){
+    const matches=sample.goal===chainGoal(current);
+    const option=new Option(workTitle(sample.sample_id)+(matches?'':' · 目标不同'),sample.sample_id);
+    option.disabled=!matches;
+    input.add(option);
+  }
+  input.value=previous;
+}
 function fillRecords(side,sample,preferred){const input=$('record-'+side),previous=preferred??input.value;input.replaceChildren(new Option('请选择已核对记录',''));for(const r of records){const c=r.confirmation;if(!c.sample_id||c.sample_id===sample)input.add(new Option(`${c.title} · ${c.observed_at}`,r.id));}input.value=previous;showRecord(side);}
 function showRecord(side){const r=records.find(r=>r.id===$('record-'+side).value),published=$('published-'+side);if(r&&published.dataset.record!==r.id){published.value=localDate(r.confirmation.published_at);published.dataset.record=r.id;}$('record-'+side+'-info').textContent=r?`统计时间 ${r.confirmation.observed_at}；范围：${{unknown:'不确定',cumulative:'截至截图累计',period:'指定时段'}[r.confirmation.scope]}；播放 ${r.confirmation.normalized.plays??'未知'}，点赞 ${r.confirmation.normalized.likes??'未知'}。`:'';}
 async function loadSource(){const version=++sourceVersion;source=null;$('suggestions').replaceChildren();$('source-goal').textContent='';if(!$('source-run').value)return;try{const result=await api('/api/cycles/source?run='+encodeURIComponent($('source-run').value));if(version!==sourceVersion)return;source=result;$('source-goal').textContent=`作品 A：${workTitle(source.sample_id)}；目标：${source.goal}`;for(const f of source.findings){const card=node('div',undefined,'suggestion');const check=node('label',undefined,'check'),input=node('input');input.type='checkbox';input.id='pick-'+f.id;check.append(input,document.createTextNode(f.suggestion));const change=field('在 B 中具体怎么做','change-'+f.id);change.querySelector('textarea').placeholder='写可执行动作，例如：前 2 秒先展示粒子成品，再讲如何生成。';card.append(check,change);$('suggestions').append(card);}if(!source.findings.length)$('suggestions').append(node('p','这份复核没有可选建议。'));}catch(e){message(e.message);}}
@@ -51,7 +66,9 @@ function render(){
   if(target){$('label-a').textContent='作品 A · '+workTitle(current.source.sample_id);$('label-b').textContent='作品 B · '+workTitle(target.sample_id);$('window-instruction').textContent=`两边都需发布后 ${current.window_hours} 小时（± ${current.tolerance_minutes} 分钟）的累计截图；两边实际时长之差也不能超过该容差。`;
     fillRecords('a',current.source.sample_id,current.comparison?.a?.source.record_id??'');fillRecords('b',target.sample_id,current.comparison?.b?.source.record_id??'');
     $('published-a').value=localDate(current.comparison?.published_a||records.find(r=>r.id===$('record-a').value)?.confirmation.published_at);$('published-b').value=localDate(current.comparison?.published_b||records.find(r=>r.id===$('record-b').value)?.confirmation.published_at);
-    $('confounders').value=current.comparison?.confounders||'';$('screenshots-match').checked=!!current.comparison?.screenshots_match;$('same-goal').checked=!!current.comparison?.same_goal_confirmed;
+    const sameGoal=current.source.goal===chainGoal(current)&&target.goal===chainGoal(current);
+    $('confounders').value=current.comparison?.confounders||'';$('screenshots-match').checked=!!current.comparison?.screenshots_match;$('same-goal').checked=sameGoal||!!current.comparison?.same_goal_confirmed;
+    $('same-goal').closest('label').hidden=sameGoal;
     $('upload-a').href='/metrics?sample='+encodeURIComponent(current.source.sample_id);$('upload-b').href='/metrics?sample='+encodeURIComponent(target.sample_id);}
   renderComparison();
   const locked=current.status==='decided';for(const form of [$('implementation-form'),$('comparison-form')])for(const input of form.elements)input.disabled=locked;$('defer-comparison').disabled=locked;
@@ -69,8 +86,31 @@ function renderComparison(){$('comparison-inputs').open=!current.comparison||cur
   for(const side of ['a','b'])if(c[side]){const link=node('a',`核查 ${workTitle(side==='a'?current.source.sample_id:current.target.sample_id)} 的原图`);link.href='/metrics?id='+c[side].source.record_id;link.onclick=e=>{e.preventDefault();openWork(link.href,'核对数据截图');};const p=node('p');p.append(link);box.append(p);}
   box.append(node('p','其他差异：'+c.confounders));const details=node('details');details.append(node('summary','如何理解这次比较'));for(const line of r.limitations)details.append(node('p',line,'helper'));box.append(details);
 }
-async function mutate(action,payload){if(busy)return;busy=true;message('正在保存…');const buttons=Array.from(document.querySelectorAll('button'));const disabled=buttons.map(b=>b.disabled);buttons.forEach(b=>b.disabled=true);
-  try{current=await api('/api/cycles/'+action,payload);await options();await listCycles();render();message(action==='compare'?(current.comparison.result.status==='ready'?'已完成数据对比，请逐条记录下一步行动。':'数据未对齐，原因已保存。补齐后可重新比较，也可总结为暂不能判断。'):action==='create'?'计划已保存。创作 B 时按上方清单执行，做好后回来记录实际采用情况。':'记录已保存。');}catch(e){message(e.message+' 若结果不确定，可刷新已有记录核查。');}finally{busy=false;buttons.forEach((b,i)=>{if(b.isConnected)b.disabled=disabled[i];});if(current?.status==='decided'){for(const form of [$('implementation-form'),$('comparison-form')])for(const input of form.elements)input.disabled=true;$('defer-comparison').disabled=true;}if(typeof syncFlow==='function')syncFlow();}}
+async function mutate(action,payload){
+  if(busy)return;
+  busy=true;
+  message('正在保存…');
+  const buttons=Array.from(document.querySelectorAll('button'));
+  const disabled=buttons.map(b=>b.disabled);
+  const restoreButtons=()=>buttons.forEach((b,i)=>{if(b.isConnected)b.disabled=disabled[i];});
+  buttons.forEach(b=>b.disabled=true);
+  try{
+    current=await api('/api/cycles/'+action,payload);
+    await options();
+    await listCycles();
+    restoreButtons();
+    render();
+    message(action==='compare'
+      ?(current.comparison.result.status==='ready'?'已完成数据对比，请逐条记录下一步行动。':'数据未对齐，可补齐后重新比较，也可总结为暂不能判断。')
+      :action==='create'?'计划已保存，请准备下一条视频。':'记录已保存。');
+  }catch(e){
+    restoreButtons();
+    message(e.message+' 若结果不确定，可刷新已有记录核查。');
+  }finally{
+    busy=false;
+    if(typeof syncFlow==='function')syncFlow();
+  }
+}
 $('source-run').onchange=()=>{dirty=false;loadSource();};
 $('create-cycle').onsubmit=e=>{e.preventDefault();if(!source){message('请先选择已提交复核。');return;}const items=source.findings.filter(f=>$('pick-'+f.id).checked).map(f=>({finding_id:f.id,planned_change:$('change-'+f.id).value}));mutate('create',{source_run:source.run,title:$('cycle-title').value,items,window_hours:Number($('window-hours').value),tolerance_minutes:Number($('window-tolerance').value),primary_metric:$('primary-metric').value,expected_direction:$('expected-direction').value,parent_id:parent?.id||null});};
 $('implementation-form').onsubmit=e=>{e.preventDefault();mutate('implement',{...base(),sample_id:$('target-sample').value,executions:current.items.map(i=>({finding_id:i.finding_id,status:$('applied-'+i.finding_id).value,note:$('note-'+i.finding_id).value,evidence:current.target?.sample_id===$('target-sample').value?(current.target.executions.find(e=>e.finding_id===i.finding_id)?.evidence||''):''}))});};
@@ -108,7 +148,7 @@ for(const side of ['a','b'])$('record-'+side).onchange=()=>showRecord(side);
 document.addEventListener('input',e=>{if(e.target.closest('form'))dirty=true;});document.addEventListener('change',e=>{if(e.target.closest('form'))dirty=true;});
 window.addEventListener('beforeunload',e=>{if(dirty){e.preventDefault();e.returnValue='';}});
 (async()=>{try{await options();await listCycles();if(query.get('parent')){parent=await api('/api/cycles/detail?id='+encodeURIComponent(query.get('parent')));if(parent.status!=='decided')throw new Error('请先完成上一轮总结');$('parent-note').textContent='上一轮行动：'+parent.decisions.map(d=>decisionNames[d.decision]+'：'+d.note).join('；');}
-  const runs=(await api('/api/cycles/sources')).runs.filter(r=>!parent||r.sample_id===parent.target.sample_id);fillSourceChoices(runs,query.get('run')||'');
+  const runs=eligibleSources((await api('/api/cycles/sources')).runs);fillSourceChoices(runs,query.get('run')||'');
   if(!runs.length)message(parent?'B 还没有已提交复核，请先复盘 B 并完成人工复核。':'请先完成一条视频的人工复核，再制定下一条计划。');
   if($('source-run').value)await loadSource();
   const requested=query.get('id')||(!query.has('fresh')&&!query.has('run')&&!query.has('parent')&&localStorage.getItem('review-active-cycle'));

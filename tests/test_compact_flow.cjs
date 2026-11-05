@@ -41,6 +41,7 @@ test('B can compare after submitted review even if no recommendation was adopted
   for(const status of ['accepted','draft']){
     const nodes={'target-sample':{value:'b'},'b-review-status':{},'open-b-review':{}};
     const context=vm.createContext({$:id=>nodes[id],syncFlow:()=>{},message:()=>{},encodeURIComponent,
+      chainGoal:()=> 'like',samples:[{sample_id:'b',goal:'like'}],
       api:async p=>p==='/api/runs'?{runs:[{id:'latest-b',sample_id:'b'}]}:{goal_changed:false,feedback:{status,findings:[]}}});
     vm.runInContext("let current={id:'cycle'},bReview=null,bPending=null,bReviewRequest=0,flowStep=2;",context);
     vm.runInContext(code,context);await vm.runInContext('refreshBReview()',context);

@@ -72,11 +72,19 @@ def process_alive(pid):
 
 
 class JobStore:
-    def __init__(self, workspace=PROJECT_ROOT):
+    def __init__(self, workspace=PROJECT_ROOT, target_goal=None):
         self.workspace = Path(workspace).resolve()
         self.folder = self.workspace / "reports/web-jobs"
         self.folder.mkdir(parents=True, exist_ok=True)
         self.slot = self.folder / "active.json"
+        self.target_goal = target_goal
+
+    def check_cycle(self, payload, sample_id=None):
+        if "cycle_id" not in payload:
+            return None
+        if self.target_goal is None:
+            raise ValueError("当前入口不支持创作链任务")
+        return self.target_goal(payload["cycle_id"], sample_id)
 
     def root(self, identifier):
         if not isinstance(identifier, str) or not JOB_ID.fullmatch(identifier):
@@ -111,6 +119,10 @@ class JobStore:
         return {"samples": result, "unreadable": unreadable, "limit": 200}
 
     def register(self, payload):
+        goal = self.check_cycle(payload)
+        if goal is not None:
+            payload = dict(payload, goal=goal)
+            del payload["cycle_id"]
         allowed = {"video", "goal", "audience", "prior_knowledge", "transcript", "sample_id"}
         if set(payload) - allowed or any(value is not None and (not isinstance(value, str) or len(value) > 8000) for value in payload.values()):
             raise ValueError("登记字段无效或过长")
@@ -188,8 +200,9 @@ class JobStore:
 
     def plan(self, payload):
         required = {"sample_id", "max_model_calls", "max_repair_rounds"}
-        if not required <= set(payload) or set(payload) - required - {'metrics_record_id', 'metrics_match_confirmed', 'model_retry_limit'}:
+        if not required <= set(payload) or set(payload) - required - {'metrics_record_id', 'metrics_match_confirmed', 'model_retry_limit', 'cycle_id'}:
             raise ValueError("计划请求字段不正确")
+        self.check_cycle(payload, payload["sample_id"])
         budget, rounds = payload["max_model_calls"], payload["max_repair_rounds"]
         retry_limit = payload.get('model_retry_limit',0)
         if type(retry_limit) is not int or retry_limit not in (0,1):
@@ -250,6 +263,7 @@ class JobStore:
         state, request = read(root / "job.json"), read(root / "request.json")
         if state["status"] != "planned" or digest(root / "request.json") != state["request_sha256"] or digest(root / "sample.json") != request["snapshot_sha256"]:
             raise ValueError("计划内容已改变，请重新生成计划")
+        self.check_cycle(request, request["sample_id"])
         sample, fingerprint = self.inputs(request["sample_id"])
         self.attach_metrics(sample, fingerprint, request)
         if fingerprint != request["fingerprint"]:

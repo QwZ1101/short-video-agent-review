@@ -28,7 +28,7 @@ LOGGED_ROUTES = set(STATIC) | {"/api/health", "/api/session", "/api/runs", "/api
     "/api/tasks/create", "/api/tasks/save", "/api/logs", "/api/logs/run", "/api/logs/requests",
     "/api/samples", "/api/samples/register", "/api/samples/materials", "/api/jobs", "/api/jobs/detail", "/api/jobs/plan", "/api/jobs/start",
     "/api/metrics", "/api/metrics/detail", "/api/metrics/image", "/api/metrics/upload", "/api/metrics/recognize", "/api/metrics/confirm",
-    "/api/cycles", "/api/cycles/chain", "/api/cycles/source", "/api/cycles/sources", "/api/cycles/detail", "/api/cycles/report",
+    "/api/cycles", "/api/cycles/chain", "/api/cycles/goal", "/api/cycles/source", "/api/cycles/sources", "/api/cycles/detail", "/api/cycles/report",
     "/api/cycles/create", "/api/cycles/implement", "/api/cycles/compare", "/api/cycles/defer", "/api/cycles/decide", "/api/cycles/close"}
 
 
@@ -36,9 +36,9 @@ class ReviewServer(ThreadingHTTPServer):
     def __init__(self, port=0, workspace=PROJECT_ROOT):
         self.store = ReviewStore(workspace)
         self.tasks = TaskStore(self.store)
-        self.jobs = JobStore(workspace)
         self.metrics = ScreenshotStore(workspace)
         self.cycles = CycleStore(self.store)
+        self.jobs = JobStore(workspace, self.cycles.target_goal)
         self.token = secrets.token_urlsafe(32)
         super().__init__(("127.0.0.1", port), Handler)
         self.workflow_logs = WorkflowLogs(workspace)
@@ -105,12 +105,15 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(self.server.cycles.listing())
             if route.path == '/api/cycles/chain':
                 return self.send(overview(self.server.cycles,query.get('id',[''])[0],float(query['hours'][0]) if 'hours' in query else None))
+            if route.path == '/api/cycles/goal':
+                return self.send(self.server.cycles.goal_context(query.get('id', [''])[0]))
             if route.path == '/api/cycles/sources':
                 return self.send(self.server.cycles.sources())
             if route.path == '/api/cycles/source':
                 return self.send(self.server.cycles.source(query.get('run', [''])[0]))
             if route.path == '/api/cycles/detail':
-                return self.send(self.server.cycles.load(query.get('id', [''])[0]))
+                record = self.server.cycles.load(query.get('id', [''])[0])
+                return self.send(dict(record, chain_goal=self.server.cycles.locked_goal(record)))
             if route.path == '/api/cycles/report':
                 return self.send(self.server.cycles.report(query.get('id', [''])[0]).encode('utf-8'), 'text/plain; charset=utf-8')
             if route.path == "/api/metrics":
@@ -182,7 +185,8 @@ class Handler(BaseHTTPRequestHandler):
                 raise ValueError("请求格式不正确")
             if route.path.startswith('/api/cycles/'):
                 operation = route.path.rsplit('/', 1)[1]
-                return self.send(getattr(self.server.cycles, operation)(payload))
+                record = getattr(self.server.cycles, operation)(payload)
+                return self.send(dict(record, chain_goal=self.server.cycles.locked_goal(record)))
             if route.path == '/api/metrics/upload':
                 return self.send(self.server.metrics.upload(payload))
             if route.path == '/api/metrics/recognize':
