@@ -4,17 +4,18 @@ const fs=require('node:fs');
 const vm=require('node:vm');
 const path=require('node:path');
 const read=name=>fs.readFileSync(path.join(__dirname,'../review-ui/dist',name),'utf8');
-test('cycle links leave embedded review while material tools stay embedded',()=>{
+test('embedded next-step links return to the workspace without navigating the page',()=>{
   const source=read('workspace.js'),start=source.indexOf("doc.addEventListener('click'");
   const code=source.slice(start,source.indexOf('// Registration',start));
-  let handler,assigned,prevented=false;const frame={};
+  let handler,returned=0,prevented=false;const frame={};
   const context=vm.createContext({URL,doc:{addEventListener:(type,fn)=>handler=fn},
-    location:{origin:'http://127.0.0.1:19433',assign:url=>assigned=url},$:()=>frame});
+    location:{origin:'http://127.0.0.1:19433'},canLeaveWork:()=>true,
+    $:id=>id==='return-work'?{click:()=>returned++}:frame});
   vm.runInContext(code,context);
   const click=href=>{prevented=false;handler({target:{closest:()=>({href})},preventDefault:()=>prevented=true});};
   click('http://127.0.0.1:19433/cycles?run=run-test');
-  assert.equal(assigned,'http://127.0.0.1:19433/cycles?run=run-test');assert.equal(frame.src,undefined);assert.ok(prevented);
-  click('http://127.0.0.1:19433/metrics?sample=test');assert.equal(frame.src,'http://127.0.0.1:19433/metrics?sample=test');
+  assert.equal(returned,1);assert.equal(frame.src,undefined);assert.ok(prevented);
+  click('http://127.0.0.1:19433/metrics?sample=test');assert.equal(frame.src,'http://127.0.0.1:19433/metrics?sample=test&embed=1');
   click('http://127.0.0.1:19433/logs?run=run-test');assert.equal(frame.src,'http://127.0.0.1:19433/logs?run=run-test');
   click('https://external.test/');assert.equal(prevented,false);
 });

@@ -36,7 +36,7 @@ function existingChoice(){return !dirty||confirm('还有未保存的内容，确
 async function listCycles(){const list=await api('/api/cycles');$('cycle-picker').replaceChildren(new Option('新建计划',''));for(const c of list.records)$('cycle-picker').add(new Option(`${c.title} · ${statusNames[c.status]}`,c.id));if(current)$('cycle-picker').value=current.id;if(list.unreadable)message(`${list.unreadable} 条旧记录校验未通过，未混入当前列表。`);}
 async function options(){const data=await api('/api/samples');samples=data.samples;records=(await api('/api/metrics')).records.filter(r=>r.status==='confirmed');}
 function fillSamples(preferred){const previous=preferred??current.target?.sample_id??'';$('target-sample').replaceChildren(new Option('请选择已登记的视频 B',''));for(const s of samples.filter(s=>s.sample_id!==current.source.sample_id))$('target-sample').add(new Option(workTitle(s.sample_id),s.sample_id));$('target-sample').value=previous;}
-function fillRecords(side,sample,preferred){const input=$('record-'+side),previous=preferred||input.value;input.replaceChildren(new Option('请选择已核对记录',''));for(const r of records){const c=r.confirmation;if(!c.sample_id||c.sample_id===sample)input.add(new Option(`${c.title} · ${c.observed_at}`,r.id));}input.value=previous;showRecord(side);}
+function fillRecords(side,sample,preferred){const input=$('record-'+side),previous=preferred??input.value;input.replaceChildren(new Option('请选择已核对记录',''));for(const r of records){const c=r.confirmation;if(!c.sample_id||c.sample_id===sample)input.add(new Option(`${c.title} · ${c.observed_at}`,r.id));}input.value=previous;showRecord(side);}
 function showRecord(side){const r=records.find(r=>r.id===$('record-'+side).value),published=$('published-'+side);if(r&&published.dataset.record!==r.id){published.value=localDate(r.confirmation.published_at);published.dataset.record=r.id;}$('record-'+side+'-info').textContent=r?`统计时间 ${r.confirmation.observed_at}；范围：${{unknown:'不确定',cumulative:'截至截图累计',period:'指定时段'}[r.confirmation.scope]}；播放 ${r.confirmation.normalized.plays??'未知'}，点赞 ${r.confirmation.normalized.likes??'未知'}。`:'';}
 async function loadSource(){const version=++sourceVersion;source=null;$('suggestions').replaceChildren();$('source-goal').textContent='';if(!$('source-run').value)return;try{const result=await api('/api/cycles/source?run='+encodeURIComponent($('source-run').value));if(version!==sourceVersion)return;source=result;$('source-goal').textContent=`作品 A：${workTitle(source.sample_id)}；目标：${source.goal}`;for(const f of source.findings){const card=node('div',undefined,'suggestion');const check=node('label',undefined,'check'),input=node('input');input.type='checkbox';input.id='pick-'+f.id;check.append(input,document.createTextNode(f.suggestion));const change=field('在 B 中具体怎么做','change-'+f.id);change.querySelector('textarea').placeholder='写可执行动作，例如：前 2 秒先展示粒子成品，再讲如何生成。';card.append(check,change);$('suggestions').append(card);}if(!source.findings.length)$('suggestions').append(node('p','这份复核没有可选建议。'));}catch(e){message(e.message);}}
 function render(){
@@ -49,7 +49,7 @@ function render(){
   for(const item of current.items){const e=current.target?.executions.find(e=>e.finding_id===item.finding_id);const group=node('section',undefined,'execution');group.append(node('h3',item.planned_change),selectField('B 中的采用情况','applied-'+item.finding_id,{'':'请确认采用情况',not_applied:'未采用',partial:'部分采用',applied:'已采用'},e?.status||''),field('实际做法 / 未采用原因','note-'+item.finding_id,e?.note??item.planned_change));group.querySelector('select').required=true;$('execution-items').append(group);}
   const target=current.target;$('comparison-section').hidden=!target;
   if(target){$('label-a').textContent='作品 A · '+workTitle(current.source.sample_id);$('label-b').textContent='作品 B · '+workTitle(target.sample_id);$('window-instruction').textContent=`两边都需发布后 ${current.window_hours} 小时（± ${current.tolerance_minutes} 分钟）的累计截图；两边实际时长之差也不能超过该容差。`;
-    fillRecords('a',current.source.sample_id,current.comparison?.a?.source.record_id);fillRecords('b',target.sample_id,current.comparison?.b?.source.record_id);
+    fillRecords('a',current.source.sample_id,current.comparison?.a?.source.record_id??'');fillRecords('b',target.sample_id,current.comparison?.b?.source.record_id??'');
     $('published-a').value=localDate(current.comparison?.published_a||records.find(r=>r.id===$('record-a').value)?.confirmation.published_at);$('published-b').value=localDate(current.comparison?.published_b||records.find(r=>r.id===$('record-b').value)?.confirmation.published_at);
     $('confounders').value=current.comparison?.confounders||'';$('screenshots-match').checked=!!current.comparison?.screenshots_match;$('same-goal').checked=!!current.comparison?.same_goal_confirmed;
     $('upload-a').href='/metrics?sample='+encodeURIComponent(current.source.sample_id);$('upload-b').href='/metrics?sample='+encodeURIComponent(target.sample_id);}
@@ -59,7 +59,6 @@ function render(){
   const choices=current.comparison?.result.status==='ready'?decisionNames:{inconclusive:decisionNames.inconclusive};
   for(const item of current.items){const group=node('section',undefined,'execution');group.append(node('h3',item.planned_change),selectField('下一轮决定','decision-'+item.finding_id,choices,'inconclusive'),field('判断理由和下一条行动','reason-'+item.finding_id));$('decision-items').append(group);}
   $('next-round').hidden=!locked;$('decisions-summary').replaceChildren(...current.decisions.map(d=>node('p',`${current.items.find(i=>i.finding_id===d.finding_id).planned_change} → ${decisionNames[d.decision]}：${d.note}`)));
-  if(target){$('review-b').href='/start?sample='+encodeURIComponent(target.sample_id);$('continue-cycle').href='/cycles?parent='+current.id;}
   history.replaceState(null,'','/cycles?id='+current.id);
 }
 function renderComparison(){$('comparison-inputs').open=!current.comparison||current.comparison.result.status!=='ready';const box=$('comparison-result');box.replaceChildren();box.hidden=!current.comparison;if(box.hidden)return;const c=current.comparison,r=c.result;box.append(node('h2',r.status==='ready'?'对比结果 · 描述变化，留待判断':'暂不能比较'));
@@ -67,7 +66,7 @@ function renderComparison(){$('comparison-inputs').open=!current.comparison||cur
   if(r.retrospective)box.append(node('p','回顾性比较：B 在计划登记前已经发布，本轮不能算作预先设计的试验。','boundary'));
   if(r.actual_hours)box.append(node('p',`实际观察：A ${r.actual_hours.a} 小时；B ${r.actual_hours.b} 小时。`,'helper'));
   if(r.rows.length){const wrapper=node('div',undefined,'table-scroll'),table=node('table',undefined,'comparison-table'),head=node('tr');for(const title of ['指标',workTitle(current.source.sample_id),workTitle(current.target.sample_id),'后者 − 前者','相对变化'])head.append(node('th',title));const thead=node('thead');thead.append(head);table.append(thead);const tbody=node('tbody');for(const row of r.rows){const tr=node('tr',undefined,row.metric===current.primary_metric?'primary-row':'');const valueText=v=>v===null?'未知':String(v)+(row.metric.endsWith('_rate')?'%':'');for(const value of [row.label+(row.metric===current.primary_metric?'（主指标）':''),valueText(row.a),valueText(row.b),row.delta===null?'无法计算':`${row.delta>0?'+':''}${row.delta} ${row.delta_unit}`,row.relative_percent===null?'无法计算':`${row.relative_percent>0?'+':''}${row.relative_percent}%`])tr.append(node('td',String(value)));tbody.append(tr);}table.append(tbody);wrapper.append(table);box.append(wrapper);}
-  for(const side of ['a','b'])if(c[side]){const link=node('a',`核查 ${workTitle(side==='a'?current.source.sample_id:current.target.sample_id)} 的原图 ↗`);link.href='/metrics?id='+c[side].source.record_id;link.target='_blank';link.rel='noopener';const p=node('p');p.append(link);box.append(p);}
+  for(const side of ['a','b'])if(c[side]){const link=node('a',`核查 ${workTitle(side==='a'?current.source.sample_id:current.target.sample_id)} 的原图`);link.href='/metrics?id='+c[side].source.record_id;link.onclick=e=>{e.preventDefault();openWork(link.href,'核对数据截图');};const p=node('p');p.append(link);box.append(p);}
   box.append(node('p','其他差异：'+c.confounders));const details=node('details');details.append(node('summary','如何理解这次比较'));for(const line of r.limitations)details.append(node('p',line,'helper'));box.append(details);
 }
 async function mutate(action,payload){if(busy)return;busy=true;message('正在保存…');const buttons=Array.from(document.querySelectorAll('button'));const disabled=buttons.map(b=>b.disabled);buttons.forEach(b=>b.disabled=true);
@@ -78,17 +77,30 @@ $('implementation-form').onsubmit=e=>{e.preventDefault();mutate('implement',{...
 $('comparison-form').onsubmit=e=>{e.preventDefault();mutate('compare',{...base(),record_a:$('record-a').value,record_b:$('record-b').value,published_a:dateValue('published-a'),published_b:dateValue('published-b'),screenshots_match:$('screenshots-match').checked,same_goal_confirmed:$('same-goal').checked,confounders:$('confounders').value});};
 $('defer-comparison').onclick=()=>mutate('defer',{...base(),reason:$('missing-reason').value});
 $('decision-form').onsubmit=e=>{e.preventDefault();mutate('decide',{...base(),decisions:current.items.map(i=>({finding_id:i.finding_id,decision:$('decision-'+i.finding_id).value,note:$('reason-'+i.finding_id).value}))});};
-$('cycle-picker').onchange=async()=>{if(!existingChoice()){$('cycle-picker').value=current?.id||'';return;}if(!$('cycle-picker').value){location.href='/cycles';return;}try{current=await api('/api/cycles/detail?id='+encodeURIComponent($('cycle-picker').value));render();message('');}catch(e){message(e.message);}};
+async function openCycle(id,showComparison=false){
+  if(!id||busy||!existingChoice()){$('cycle-picker').value=current?.id||'';return;}
+  busy=true;
+  try{
+    current=await api('/api/cycles/detail?id='+encodeURIComponent(id));
+    parent=null;
+    $('workspace-menu').open=false;
+    render();
+    if(showComparison)$('single-round').open=true;
+    message('');
+    window.scrollTo({top:0});
+  }catch(e){$('cycle-picker').value=current?.id||'';message(e.message);}
+  finally{busy=false;}
+}
+$('cycle-picker').onchange=()=>openCycle($('cycle-picker').value);
 $('new-cycle').onclick=()=>{if(existingChoice()){dirty=false;location.href='/cycles';}};
 async function refreshAvailableRecords(announce=false){
   if(!current||busy)return;
   if(refreshingOptions)return refreshingOptions;
   const cycleId=current.id,choice=$('target-sample').value;
-  refreshingOptions=(async()=>{try{await options();if(current?.id!==cycleId)return;fillSamples(choice);if(current.target){fillRecords('a',current.source.sample_id);fillRecords('b',current.target.sample_id);}if(typeof refreshBReview==='function')await refreshBReview();if(announce)message('作品与数据已更新，可以继续当前步骤。');}catch(e){message('截图列表更新失败：'+e.message+' 可点击“刷新已核对截图”重试。');}finally{refreshingOptions=null;}})();
+  refreshingOptions=(async()=>{try{await options();if(current?.id!==cycleId)return;fillSamples(choice);if(current.target){fillRecords('a',current.source.sample_id);fillRecords('b',current.target.sample_id);}if(typeof refreshBReview==='function')await refreshBReview();if(announce)message('作品与数据已更新，可以继续当前步骤。');}catch(e){message('截图列表更新失败：'+e.message);}finally{refreshingOptions=null;}})();
   return refreshingOptions;
 }
 $('refresh-options').onclick=()=>refreshAvailableRecords(true);
-$('refresh-comparison-records').onclick=()=>refreshAvailableRecords(true);
 window.addEventListener('focus',()=>refreshAvailableRecords());
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')refreshAvailableRecords();});
 $('primary-metric').onchange=()=>{$('expected-direction').value=$('primary-metric').value==='bounce_2s_rate'?'decrease':'increase';};
@@ -99,5 +111,6 @@ window.addEventListener('beforeunload',e=>{if(dirty){e.preventDefault();e.return
   const runs=(await api('/api/cycles/sources')).runs.filter(r=>!parent||r.sample_id===parent.target.sample_id);fillSourceChoices(runs,query.get('run')||'');
   if(!runs.length)message(parent?'B 还没有已提交复核，请先复盘 B 并完成人工复核。':'请先完成一条视频的人工复核，再制定下一条计划。');
   if($('source-run').value)await loadSource();
-  if(query.get('id')){current=await api('/api/cycles/detail?id='+encodeURIComponent(query.get('id')));render();}
+  const requested=query.get('id')||(!query.has('fresh')&&!query.has('run')&&!query.has('parent')&&localStorage.getItem('review-active-cycle'));
+  if(requested)await openCycle(requested,query.get('round')==='1');
 }catch(e){message(e.message);}})();

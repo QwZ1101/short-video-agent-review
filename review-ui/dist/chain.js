@@ -5,7 +5,12 @@ window.ChainOverview=(()=>{
   const make=(tag,text,cls)=>{const e=document.createElement(tag);if(text!==undefined)e.textContent=text;if(cls)e.className=cls;return e;};
   const labels={comparable:'可比较',unaligned:'暂不可比较',conflict:'记录需核对',missing:'待采集',planned:'待创作'};
   const format=(v,key)=>v===null||v===undefined?'—':String(v)+(key.endsWith('_rate')?'%':'');
-  function link(text,href){const a=make('a',text);a.href=href;return a;}
+  function action(text,handler){
+    const button=make('button',text,'secondary');
+    button.type='button';
+    button.onclick=handler;
+    return button;
+  }
   function svg(tag,attributes,text){const n=document.createElementNS('http://www.w3.org/2000/svg',tag);for(const [k,v] of Object.entries(attributes))n.setAttribute(k,String(v));if(text!==undefined)n.textContent=text;return n;}
   function chart(){
     const key=get('chain-metric').value,box=get('chain-chart');box.replaceChildren();
@@ -26,42 +31,51 @@ window.ChainOverview=(()=>{
       const labelX=x(p.i)+(edge==='start'?8:edge==='end'?-8:0);
       plot.append(dot,svg('text',{x:labelX,y:y(p.v)-12,'text-anchor':edge,fill:'#235c49','font-size':12},format(p.v,key)));
     }
-    box.append(plot,make('p','缺数据或窗口不一致的作品保留在链中，趋势线在该处断开；悬停数据点可查看采用的做法。','helper'));
+    box.append(plot);
   }
   function render(){
-    get('chain-scope').textContent=`发布后 ${data.window_hours} 小时（±${data.tolerance_minutes} 分钟） · ${data.goal} · ${data.nodes.filter(n=>n.sample_id).length} 条视频`;
+    const videos=data.nodes.filter(n=>n.sample_id);
+    const comparable=videos.filter(n=>n.status==='comparable');
+    get('chain-scope').textContent=`发布后 ${data.window_hours} 小时 · ${videos.length} 条视频 · ${comparable.length} 条数据可比`;
     const windows=get('chain-window');windows.replaceChildren(...data.windows.map(v=>new Option(v+' 小时',v)));windows.value=data.window_hours;
-    const metric=get('chain-metric'),before=metric.value;metric.replaceChildren(...Object.entries(data.metrics).map(([k,v])=>new Option(v,k)));if(before in data.metrics)metric.value=before;
+    get('chain-window-field').hidden=data.windows.length<2;
+    const metric=get('chain-metric'),before=metric.value;metric.replaceChildren(...Object.entries(data.metrics).map(([k,v])=>new Option(v,k)));if(before in data.metrics)metric.value=before;else if(current?.primary_metric in data.metrics)metric.value=current.primary_metric;
     const branch=get('chain-branch');branch.replaceChildren(new Option('选择后续分支',''));for(const b of data.branches)branch.add(new Option(b.title,b.id));get('chain-branches').hidden=!data.branches.length;
     get('chain-root').hidden=data.selected_id===data.root_id;
-    get('chain-nodes').replaceChildren(...data.nodes.map((n,i)=>{const item=make('div',undefined,'chain-node');if(n.cover_url){const cover=make('img');cover.src=n.cover_url;cover.alt=n.title+' 的视频抽帧';cover.loading='lazy';item.append(cover);}item.append(make('small','视频 '+(i+1)),link(n.title,'/cycles?id='+encodeURIComponent(n.cycle_id)+'&round=1'),make('span',labels[n.status]));return item;}));
+    renderTable();
+    get('chain-warning').textContent=[...data.warnings,data.limitation].join('\n');
+    chart();
+  }
+  function renderTable(){
+    const metric=get('chain-metric').value;
     const table=make('table',undefined,'comparison-table'),head=make('tr');
-    for(const name of ['视频名称','播放量','点赞量','每百次播放点赞数','完播率','2秒跳出率','数据状态'])head.append(make('th',name));
+    for(const name of ['视频',data.metrics[metric]])head.append(make('th',name));
     const thead=make('thead');thead.append(head);table.append(thead);const body=make('tbody');
     for(const n of data.nodes){
       const tr=make('tr');const name=make('td');const details=make('details');details.append(make('summary',n.title));
       details.append(make('p',n.reason,'helper'));
-      if(n.changes.length)details.append(make('p','采用的做法：'+n.changes.join('；'),'helper'));
+      if(n.changes.length)details.append(make('p',n.changes.join(' · '),'helper'));
       if(n.observed_at)details.append(make('p',`统计时间：${n.observed_at}；实际观察：${n.actual_hours??'未知'} 小时${n.approximate?'；含近似数值':''}`,'helper'));
-      details.append(link('查看关联轮次','/cycles?id='+encodeURIComponent(n.cycle_id)+'&round=1'));
-      if(n.review_run)details.append(make('br'),link('查看复盘','/?run='+encodeURIComponent(n.review_run)));
-      if(n.record_id)details.append(make('br'),link('核对数据截图','/metrics?id='+encodeURIComponent(n.record_id)));
-      for(const r of n.record_options||[])if(n.status==='conflict')details.append(make('p'),link('核对候选记录 · '+r.observed_at,'/metrics?id='+encodeURIComponent(r.id)));
+      const actions=make('div',undefined,'chain-row-actions');
+      if(n.cycle_id!==current?.id)actions.append(action('查看关联轮次',()=>openCycle(n.cycle_id,true)));
+      if(n.review_run)actions.append(action('查看复盘',()=>openWork('/?run='+encodeURIComponent(n.review_run),'查看复盘')));
+      if(n.record_id)actions.append(action('查看数据截图',()=>openWork('/metrics?id='+encodeURIComponent(n.record_id),'查看数据截图')));
+      for(const r of n.record_options||[])if(n.status==='conflict')actions.append(action('核对 '+r.observed_at,()=>openWork('/metrics?id='+encodeURIComponent(r.id),'核对候选记录')));
+      details.append(actions);
       name.append(details);tr.append(name);
-      for(const key of ['plays','likes','likes_per_100','completion_rate','bounce_2s_rate'])tr.append(make('td',format(n.values[key],key)));
-      tr.append(make('td',labels[n.status]));body.append(tr);
+      const comparable=n.status==='comparable';
+      const value=comparable?(n.values[metric]==null?'缺少此指标':format(n.values[metric],metric)):labels[n.status];
+      tr.append(make('td',value,comparable?'chain-value':'chain-muted'));body.append(tr);
     }
     table.append(body);get('chain-table').replaceChildren(table);
-    get('chain-warning').textContent=[...data.warnings,data.limitation].join('\n');chart();
   }
   async function load(id,hours){
     const turn=++version;selected=id;get('chain-loading').textContent='正在读取创作链…';
     try{const r=await fetch('/api/cycles/chain?id='+encodeURIComponent(id)+(hours?'&hours='+encodeURIComponent(hours):''));const value=await r.json();if(turn!==version)return;if(!r.ok)throw new Error(value.error||'读取失败');data=value;render();get('chain-loading').textContent='';}
-    catch(e){if(turn===version){get('chain-loading').textContent='创作链读取失败：'+e.message;get('chain-nodes').replaceChildren();get('chain-chart').replaceChildren();get('chain-table').replaceChildren();}}
+    catch(e){if(turn===version){data=null;get('chain-loading').textContent='创作链读取失败：'+e.message;get('chain-chart').replaceChildren();get('chain-table').replaceChildren();}}
   }
-  get('chain-refresh').onclick=()=>load(selected,get('chain-window').value);
   get('chain-root').onclick=()=>{if(data)load(data.root_id,get('chain-window').value);};
-  get('chain-metric').onchange=()=>{if(data)chart();};
+  get('chain-metric').onchange=()=>{if(data){renderTable();chart();}};
   get('chain-window').onchange=()=>load(selected,get('chain-window').value);
   get('chain-branch').onchange=()=>{if(get('chain-branch').value)load(get('chain-branch').value,get('chain-window').value);};
   if(typeof current!=='undefined'&&current)load(current.id);

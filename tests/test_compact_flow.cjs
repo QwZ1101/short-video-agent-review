@@ -42,8 +42,17 @@ test('B can compare after submitted review even if no recommendation was adopted
     const nodes={'target-sample':{value:'b'},'b-review-status':{},'open-b-review':{}};
     const context=vm.createContext({$:id=>nodes[id],syncFlow:()=>{},message:()=>{},encodeURIComponent,
       api:async p=>p==='/api/runs'?{runs:[{id:'latest-b',sample_id:'b'}]}:{goal_changed:false,feedback:{status,findings:[]}}});
-    vm.runInContext("let current={id:'cycle'},bReview=null,bPending=null,flowStep=2;",context);
+    vm.runInContext("let current={id:'cycle'},bReview=null,bPending=null,bReviewRequest=0,flowStep=2;",context);
     vm.runInContext(code,context);await vm.runInContext('refreshBReview()',context);
     assert.equal(vm.runInContext('!!bReview',context),status==='accepted');
   }
+});
+test('loading an adopted B stays on review until B is reviewed',()=>{
+  const source=read('workspace.js');
+  const context=vm.createContext({$:()=>({value:'b'})});
+  vm.runInContext("let current={target:{sample_id:'b'},status:'implemented'},bReview=null,flowStep=0;",context);
+  vm.runInContext(source.slice(source.indexOf('function resumeStep()'),source.indexOf('const originalRender')),context);
+  assert.equal(vm.runInContext('resumeStep()',context),2);
+  assert.equal(vm.runInContext('bReview={id:"run-b"};resumeStep()',context),3);
+  assert.equal(vm.runInContext('current.status="decided";bReview=null;resumeStep()',context),3);
 });
