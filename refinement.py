@@ -5,6 +5,8 @@ from run_workflow import check_saved_verification, execute_stage, read_json, run
 from review_tutorial import write_json
 from verify_tutorial import load_review_run
 from revise_review import repair_tasks, validate_revision
+from feedback_policy import route_feedback
+from workflow_definition import load_template
 
 
 STOP_REASONS = {
@@ -17,20 +19,14 @@ STOP_REASONS = {
 
 
 def decide(tasks, rounds, maximum, remaining):
-    if any(t["status"] == "insufficient_evidence" for t in tasks):
-        return "awaiting_evidence"
-    if all(t["status"] == "supported" for t in tasks):
-        return "supported"
-    if rounds >= maximum:
-        return "round_limit"
-    if remaining < 2:
-        return "budget_limit"
-    return "repair"
+    return route_feedback(tasks, rounds, maximum, remaining)['action']
 
 
 def run_refinement_loop(root, state, paths, model, max_rounds):
     if type(max_rounds) is not int or not 0 <= max_rounds <= 2:
         raise ValueError("返修最多允许 0 到 2 轮")
+    definition = state.get('plan', {}).get('workflow_definition') or load_template()
+    max_rounds = min(max_rounds, definition['feedback_policy']['max_rounds'])
     state["refinement"] = {"status": "running", "max_rounds": max_rounds, "rounds_started": 0,
                            "rounds": [], "policy": "stop_on_any_insufficient_evidence"}
     control = state["refinement"]
@@ -39,8 +35,11 @@ def run_refinement_loop(root, state, paths, model, max_rounds):
             original, bundle, result, _ = check_saved_verification(Path(paths["verification_dir"]))
             tasks = repair_tasks(result)
             control["tasks"] = tasks
-            gate = decide(tasks, control["rounds_started"], max_rounds,
-                          state["model_stage_budget"] - state["model_stage_attempts"])
+            decision = route_feedback(tasks, control["rounds_started"], max_rounds,
+                                      state["model_stage_budget"] - state["model_stage_attempts"])
+            control.setdefault('decisions', []).append(decision)
+            save_state(root, state, 'feedback_routed', **decision)
+            gate = decision['action']
             if gate != "repair":
                 control.update(status=gate, stop_reason=STOP_REASONS[gate])
                 write_json(root / "repair-tasks.json", {"status": gate, "tasks": tasks, "reason": STOP_REASONS[gate]})

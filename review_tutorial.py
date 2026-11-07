@@ -2,6 +2,8 @@
 
 仅使用标准库。不会执行源码包，不读取人工基准答案，不保存 API 密钥。
 """
+from workflow_definition import role_prompt
+
 import argparse
 import base64
 from datetime import datetime
@@ -110,7 +112,7 @@ def build_request(bundle, images, model, system_prompt=None):
                         {"type": "image_url", "image_url": {"url": "data:%s;base64,%s" % (
                             item["mime"], base64.b64encode(item["raw"]).decode("ascii"))}}])
     if system_prompt is None:
-        system_prompt = (PROJECT_ROOT / "prompts/tutorial_review.md").read_text(encoding="utf-8")
+        system_prompt = role_prompt("content_reviewer")
         system_prompt += '\n本次完整报告的 sample_id 必须原样填写：' + json.dumps(bundle['task']['sample_id'], ensure_ascii=False)
         system_prompt += '\n返回前检查：最外层是对象，包含 sample_id、summary、findings、limitations；建议数组只能放在 findings 内，不能单独返回数组。'
     return {"model": model, "enable_thinking": False, "stream": True, "stream_options": {"include_usage": True}, "max_tokens": 5000,

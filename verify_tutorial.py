@@ -2,6 +2,8 @@
 
 使用初稿留存的原始证据，不读取人工核对记录，不重新生成初稿。
 """
+from workflow_definition import role_prompt
+
 import argparse
 from datetime import datetime
 import hashlib
@@ -44,7 +46,7 @@ def load_review_run(source_dir):
 
 
 def build_verification_request(review, bundle, images, model):
-    prompt = (PROJECT_ROOT / "prompts/tutorial_verify.md").read_text(encoding="utf-8")
+    prompt = role_prompt("evidence_verifier")
     payload = build_request(dict(bundle, original_review=review), images, model, system_prompt=prompt)
     payload["messages"][1]["content"].append({"type": "text", "text":
         "证据已全部提供。现在请按系统规定返回一个完整 JSON 对象，顶层字段为 sample_id、access_check、summary_check、checks、revised_review、limitations。"

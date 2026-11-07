@@ -18,6 +18,7 @@ from check_materials import PROJECT_ROOT, load_sample, resolve_path
 from review_tutorial import render_report, validate_review, write_json
 from verify_tutorial import load_review_run, render_verification, validate_verification
 from workflow_plan import build_plan
+from workflow_definition import load_template, template_identity
 from platform_metrics import calculate_metrics
 from local_storage import atomic_json
 
@@ -78,6 +79,11 @@ def execute_stage(root, state, identifier, action, model_stage=False):
 
 
 def run_script(root, stage, script, arguments, timeout=240):
+    plan_path = root / 'plan.json'
+    if plan_path.is_file():
+        identity = read_json(plan_path).get('template_identity')
+        if identity and identity != template_identity(load_template()):
+            raise ValueError('工作流模板或角色提示词在本轮运行期间发生变化，请重新生成计划')
     log_path = root / (stage + ".log")
     print("正在运行：" + stage, flush=True)
     with log_path.open("a", encoding="utf-8") as log:

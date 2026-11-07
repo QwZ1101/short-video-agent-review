@@ -20,6 +20,8 @@
 
 剩余开发与参赛演示验收见 [项目进度](docs/project-status.md)。
 
+系统分层、Agent 角色、调度边界和参赛缺口见 [架构设计](docs/architecture.md)。版本化定义在 `workflows/tutorial-review.json`，实际计划保存定义与提示词指纹；验证反馈调度在运行事件中记录 `feedback_routed`。
+
 ## 本机运行
 
 需要 Python 3.9 或更新版本。核心程序仅使用标准库；视频处理还需要 PATH 中有 ffmpeg、ffprobe。Windows 可以直接运行项目的 `.cmd` 脚本。

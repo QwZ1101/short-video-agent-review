@@ -1,0 +1,130 @@
+{
+  "schema_version": 1,
+  "id": "tutorial-review",
+  "version": 1,
+  "agents": {
+    "material_checker": {
+      "kind": "tool",
+      "tools": [
+        "check_materials.py"
+      ]
+    },
+    "video_tool": {
+      "kind": "tool",
+      "tools": [
+        "prepare_video.py"
+      ]
+    },
+    "data_calculator": {
+      "kind": "tool",
+      "tools": [
+        "platform_metrics.calculate_metrics"
+      ]
+    },
+    "content_reviewer": {
+      "kind": "model",
+      "tools": [
+        "review_tutorial.py"
+      ],
+      "prompt": "prompts/tutorial_review.md"
+    },
+    "evidence_verifier": {
+      "kind": "model",
+      "tools": [
+        "verify_tutorial.py"
+      ],
+      "prompt": "prompts/tutorial_verify.md"
+    },
+    "review_reviser": {
+      "kind": "model",
+      "tools": [
+        "revise_review.py"
+      ],
+      "prompt": "prompts/tutorial_revise.md"
+    }
+  },
+  "tasks": [
+    {
+      "id": "materials",
+      "name": "检查材料",
+      "role": "material_checker",
+      "tool": "check_materials.py",
+      "depends_on": [],
+      "inputs": [
+        "sample"
+      ],
+      "outputs": [
+        "materials_report"
+      ]
+    },
+    {
+      "id": "video",
+      "name": "提取视频证据",
+      "role": "video_tool",
+      "tool": "prepare_video.py",
+      "depends_on": [
+        "materials"
+      ],
+      "inputs": [
+        "sample"
+      ],
+      "outputs": [
+        "video_evidence"
+      ]
+    },
+    {
+      "id": "metrics",
+      "name": "计算平台数据",
+      "role": "data_calculator",
+      "tool": "platform_metrics.calculate_metrics",
+      "depends_on": [
+        "materials"
+      ],
+      "inputs": [
+        "platform_metrics"
+      ],
+      "outputs": [
+        "metrics_result"
+      ]
+    },
+    {
+      "id": "analysis",
+      "name": "内容分析",
+      "role": "content_reviewer",
+      "tool": "review_tutorial.py",
+      "depends_on": [
+        "video",
+        "metrics"
+      ],
+      "inputs": [
+        "video_evidence",
+        "metrics_result"
+      ],
+      "outputs": [
+        "review",
+        "evidence_catalog"
+      ]
+    },
+    {
+      "id": "verification",
+      "name": "证据验证",
+      "role": "evidence_verifier",
+      "tool": "verify_tutorial.py",
+      "depends_on": [
+        "analysis"
+      ],
+      "inputs": [
+        "review",
+        "evidence_catalog"
+      ],
+      "outputs": [
+        "verified_candidate"
+      ]
+    }
+  ],
+  "feedback_policy": {
+    "max_rounds": 2,
+    "calls_per_round": 2,
+    "stop_on_insufficient_evidence": true
+  }
+}

@@ -1,16 +1,12 @@
 """根据材料生成可解释任务计划。规则调度，非模型自主规划。"""
 from platform_metrics import calculate_metrics
+from workflow_definition import load_template, template_identity
 
 
 def build_plan(sample, budget):
     data = calculate_metrics(sample.get("platform_metrics"))
-    specs = [
-        ("materials", "检查材料", "material_checker", "check_materials.py", [], ["sample"], ["materials_report"]),
-        ("video", "提取视频证据", "video_tool", "prepare_video.py", ["materials"], ["sample"], ["video_evidence"]),
-        ("metrics", "计算平台数据", "data_calculator", "platform_metrics.calculate_metrics", ["materials"], ["platform_metrics"], ["metrics_result"]),
-        ("analysis", "内容分析", "content_reviewer", "review_tutorial.py", ["video", "metrics"], ["video_evidence", "metrics_result"], ["review", "evidence_catalog"]),
-        ("verification", "证据验证", "evidence_verifier", "verify_tutorial.py", ["analysis"], ["review", "evidence_catalog"], ["verified_candidate"]),
-    ]
+    template = load_template()
+    specs = [(t["id"], t["name"], t["role"], t["tool"], t["depends_on"], t["inputs"], t["outputs"]) for t in template["tasks"]]
     tasks = []
     for identifier, name, role, tool, deps, inputs, outputs in specs:
         skip = identifier == "metrics" and data["status"] == "skipped"
@@ -18,7 +14,8 @@ def build_plan(sample, budget):
             "inputs": inputs, "outputs": outputs, "action": "skip" if skip else "execute",
             "reason": data["reason"] if skip else "提供数据，使用确定性计算" if identifier == "metrics" else "完成复盘与证据核对所需步骤",
             "model_calls": 1 if identifier in ("analysis", "verification") else 0})
-    return {"schema_version": 1, "planner": "rules_v1", "sample_id": sample["sample_id"],
+    return {"schema_version": 1, "planner": "validated_template_v1", "workflow_definition": template,
+        "template_identity": template_identity(template), "sample_id": sample["sample_id"],
         "goal_revision": sample.get("goal_revision"), "goal": sample["tutorial_goal"],
         "model_stage_budget": budget, "required_model_stages": 2, "platform_data": data,
         "ready": budget >= 2, "blocked_reason": "" if budget >= 2 else "完整分析与验证至少需要两个模型阶段预算",

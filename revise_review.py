@@ -1,4 +1,6 @@
 """按验证反馈修正初稿一次。证据不增加，结果必须再次独立验证。"""
+from workflow_definition import role_prompt
+
 import argparse
 from datetime import datetime
 import hashlib
@@ -34,7 +36,7 @@ def validate_revision(revised, original, bundle, tasks):
 
 
 def revision_request(original, bundle, images, model, tasks):
-    prompt = (PROJECT_ROOT / "prompts/tutorial_revise.md").read_text(encoding="utf-8")
+    prompt = role_prompt("review_reviser")
     return build_request(dict(bundle, original_review=original, repair_tasks=tasks), images, model, system_prompt=prompt)
 
 
