@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "id": "tutorial-review",
-  "version": 1,
+  "version": 2,
   "agents": {
     "material_checker": {
       "kind": "tool",
@@ -55,7 +55,8 @@
       ],
       "outputs": [
         "materials_report"
-      ]
+      ],
+      "priority": 0
     },
     {
       "id": "video",
@@ -70,7 +71,8 @@
       ],
       "outputs": [
         "video_evidence"
-      ]
+      ],
+      "priority": 0
     },
     {
       "id": "metrics",
@@ -85,7 +87,8 @@
       ],
       "outputs": [
         "metrics_result"
-      ]
+      ],
+      "priority": 10
     },
     {
       "id": "analysis",
@@ -103,7 +106,8 @@
       "outputs": [
         "review",
         "evidence_catalog"
-      ]
+      ],
+      "priority": 0
     },
     {
       "id": "verification",
@@ -119,12 +123,17 @@
       ],
       "outputs": [
         "verified_candidate"
-      ]
+      ],
+      "priority": 0
     }
   ],
   "feedback_policy": {
     "max_rounds": 2,
     "calls_per_round": 2,
     "stop_on_insufficient_evidence": true
+  },
+  "scheduler": {
+    "max_workers": 2,
+    "strategy": "dependency_ready_priority_role_capacity"
   }
 }

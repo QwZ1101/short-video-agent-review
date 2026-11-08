@@ -97,6 +97,10 @@ class MetricsPlanTests(unittest.TestCase):
         self.assertEqual(state["data_analysis"]["status"], "completed")
         self.assertEqual(state["model_stage_attempts"], 2)
         self.assertTrue(all(s["status"] == "completed" for s in state["stages"]))
+        dispatched = [e for e in events if e['event'] == 'scheduler_decision' and e['operation'] == 'dispatch']
+        self.assertEqual(len(dispatched), 5)
+        self.assertEqual(dispatched[1]['task'], 'metrics')
+        self.assertEqual(dispatched[-1]['task'], 'verification')
 
     def test_insufficient_budget_stops_before_tools(self):
         state, events, called = self.run_fixture(None, budget=1)

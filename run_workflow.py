@@ -13,6 +13,8 @@ import shutil
 import subprocess
 import sys
 import time
+import threading
+from workflow_scheduler import schedule
 
 from check_materials import PROJECT_ROOT, load_sample, resolve_path
 from review_tutorial import render_report, validate_review, write_json
@@ -42,7 +44,13 @@ def new_state(mode, budget, sample_id):
             "human_review": {"status": "pending"}}
 
 
+STATE_LOCK = threading.RLock()
+
 def save_state(root, state, event, **details):
+    with STATE_LOCK:
+        _save_state(root, state, event, **details)
+
+def _save_state(root, state, event, **details):
     # 同一任务不并行写状态；先写临时文件再替换，避免半份 JSON。
     atomic_json(root / "workflow.json", state)
     with (root / "events.jsonl").open("a", encoding="utf-8") as output:
@@ -50,31 +58,37 @@ def save_state(root, state, event, **details):
 
 
 def execute_stage(root, state, identifier, action, model_stage=False):
-    index = next(i for i, step in enumerate(state["stages"]) if step["id"] == identifier)
-    step = state["stages"][index]
-    if state["status"] != "running" or step["status"] != "pending" or any(
-            item["status"] != "completed" and not (item["id"] == "metrics" and
-            item["status"] == "skipped" and item.get("execution") == "conditional_no_data")
-            for item in state["stages"][:index]):
-        raise ValueError("阶段依赖未完成或阶段已经执行：" + identifier)
-    step.update(status="running", started_at=now())
-    save_state(root, state, "stage_started", stage=identifier)
+    with STATE_LOCK:
+        index = next(i for i, step in enumerate(state["stages"]) if step["id"] == identifier)
+        step = state["stages"][index]
+        task = next((t for t in state.get('plan', {}).get('tasks', []) if t['id'] == identifier), None)
+        dependencies = [s for s in state['stages'] if s['id'] in task['depends_on']] if task else state['stages'][:index]
+        if state['status'] != 'running' or step['status'] != 'pending' or any(
+                s['status'] != 'completed' and not (s['id'] == 'metrics' and s['status'] == 'skipped'
+                and s.get('execution') == 'conditional_no_data') for s in dependencies):
+            raise ValueError('阶段依赖未完成或阶段已经执行：' + identifier)
+        step.update(status='running', started_at=now())
+        save_state(root, state, 'stage_started', stage=identifier)
     try:
         if model_stage:
-            if state["model_stage_attempts"] >= state["model_stage_budget"]:
-                raise ValueError("达到模型阶段次数上限，停止后续调用")
-            state["model_stage_attempts"] += 1
-            save_state(root, state, "model_budget_reserved", stage=identifier)
+            with STATE_LOCK:
+                if state['model_stage_attempts'] >= state['model_stage_budget']:
+                    raise ValueError('达到模型阶段次数上限，停止后续调用')
+                state['model_stage_attempts'] += 1
+                save_state(root, state, 'model_budget_reserved', stage=identifier)
         artifacts = action()
-        step.update(status="completed", finished_at=now(), artifacts=artifacts)
-        save_state(root, state, "stage_completed", stage=identifier)
+        with STATE_LOCK:
+            step.update(status='completed', finished_at=now(), artifacts=artifacts)
+            save_state(root, state, 'stage_completed', stage=identifier)
         return artifacts
     except Exception as error:
-        step.update(status="failed", finished_at=now(), error=str(error))
-        for remaining in state["stages"][index + 1:]:
-            remaining.update(status="skipped", reason="前置阶段失败，未执行")
-        state.update(status="failed", stop_reason=str(error), finished_at=now())
-        save_state(root, state, "stage_failed", stage=identifier, error=str(error))
+        with STATE_LOCK:
+            step.update(status='failed', finished_at=now(), error=str(error))
+            for remaining in state['stages']:
+                if remaining['status'] == 'pending':
+                    remaining.update(status='skipped', reason='前置阶段失败，未执行')
+            state.update(status='failed', stop_reason=str(error), finished_at=now())
+            save_state(root, state, 'stage_failed', stage=identifier, error=str(error))
         raise
 
 
@@ -168,14 +182,12 @@ def run_live(root, state, sample_path, model, max_repair_rounds=0, model_retry_l
         destination = root / "materials"
         run_script(root, "materials", "check_materials.py", ["--sample", str(snapshot), "--output-dir", str(destination)])
         return {"report": str(destination / "materials-report.md")}
-    execute_stage(root, state, "materials", materials)
 
     def video():
         destination = root / "video"
         run_script(root, "video", "prepare_video.py", ["--sample", str(snapshot), "--output-dir", str(destination)], timeout=600)
         paths["video_evidence"] = read_json(destination / "latest.json")["data_path"]
         return {"video_evidence": paths["video_evidence"]}
-    execute_stage(root, state, "video", video)
 
     def metrics():
         result = calculate_metrics(sample.get("platform_metrics"))
@@ -185,13 +197,14 @@ def run_live(root, state, sample_path, model, max_repair_rounds=0, model_retry_l
         state["data_analysis"] = {"status": result["status"], "reason": result.get("reason", "已计算；仅使用用户录入数据"),
                                   "report": str(destination), "execution": "deterministic_no_model_call"}
         return {"metrics_result": str(destination)}
-    if next(task for task in plan["tasks"] if task["id"] == "metrics")["action"] == "skip":
-        artifacts = metrics()
-        step = next(stage for stage in state["stages"] if stage["id"] == "metrics")
-        step.update(status="skipped", reason=state["data_analysis"]["reason"], execution="conditional_no_data", artifacts=artifacts)
-        save_state(root, state, "stage_skipped", stage="metrics", reason=step["reason"])
-    else:
-        execute_stage(root, state, "metrics", metrics)
+    def metrics_stage():
+        if next(task for task in plan["tasks"] if task["id"] == "metrics")["action"] == "skip":
+            artifacts = metrics()
+            step = next(stage for stage in state["stages"] if stage["id"] == "metrics")
+            step.update(status="skipped", reason=state["data_analysis"]["reason"], execution="conditional_no_data", artifacts=artifacts)
+            save_state(root, state, "stage_skipped", stage="metrics", reason=step["reason"])
+        else:
+            execute_stage(root, state, "metrics", metrics)
 
     def analysis():
         destination = root / "analysis"
@@ -225,14 +238,22 @@ def run_live(root, state, sample_path, model, max_repair_rounds=0, model_retry_l
                     reason='故障恢复：'+kind+'；开始本阶段第 '+str(attempt+2)+' 次尝试，计入总预算',
                     reused_analysis=identifier=='verification')
                 time.sleep(1)
-    execute_stage(root, state, "analysis", lambda: model_action('analysis',analysis), model_stage=True)
 
     def verification():
         destination = root / "verification"
         run_script(root, "verification", "verify_tutorial.py", ["--review-dir", paths["analysis_dir"], "--output-dir", str(destination), "--model", model])
         paths["verification_dir"] = read_json(destination / "latest.json")["run_dir"]
         return {"verification_dir": paths["verification_dir"]}
-    execute_stage(root, state, "verification", lambda: model_action('verification',verification), model_stage=True)
+    actions = {
+        'materials': lambda: execute_stage(root, state, 'materials', materials),
+        'video': lambda: execute_stage(root, state, 'video', video),
+        'metrics': metrics_stage,
+        'analysis': lambda: execute_stage(root, state, 'analysis', lambda: model_action('analysis', analysis), model_stage=True),
+        'verification': lambda: execute_stage(root, state, 'verification', lambda: model_action('verification', verification), model_stage=True),
+    }
+    schedule(plan['tasks'], actions,
+             max_workers=plan['workflow_definition'].get('scheduler', {}).get('max_workers', 1),
+             on_event=lambda **details: save_state(root, state, 'scheduler_decision', **details))
     if max_repair_rounds:
         from refinement import run_refinement_loop
         run_refinement_loop(root, state, paths, model, max_repair_rounds)

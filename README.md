@@ -22,6 +22,8 @@
 
 系统分层、Agent 角色、调度边界和参赛缺口见 [架构设计](docs/architecture.md)。版本化定义在 `workflows/tutorial-review.json`，实际计划保存定义与提示词指纹；验证反馈调度在运行事件中记录 `feedback_routed`。
 
+实际 live 执行支持依赖就绪派发、工具分支并行、任务优先级与角色容量限制，事件记为 `scheduler_decision`。运行 `python evaluation_batch.py` 可生成本机真实历史案例对照及失败尝试审计，不新增模型调用；质量指标仍需人工评判。
+
 ## 本机运行
 
 需要 Python 3.9 或更新版本。核心程序仅使用标准库；视频处理还需要 PATH 中有 ffmpeg、ffprobe。Windows 可以直接运行项目的 `.cmd` 脚本。

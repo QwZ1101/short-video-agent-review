@@ -13,13 +13,14 @@ def build_plan(sample, budget):
         tasks.append({"id": identifier, "name": name, "role": role, "tool": tool, "depends_on": deps,
             "inputs": inputs, "outputs": outputs, "action": "skip" if skip else "execute",
             "reason": data["reason"] if skip else "提供数据，使用确定性计算" if identifier == "metrics" else "完成复盘与证据核对所需步骤",
+            "priority": next(t.get("priority", 0) for t in template["tasks"] if t["id"] == identifier),
             "model_calls": 1 if identifier in ("analysis", "verification") else 0})
     return {"schema_version": 1, "planner": "validated_template_v1", "workflow_definition": template,
         "template_identity": template_identity(template), "sample_id": sample["sample_id"],
         "goal_revision": sample.get("goal_revision"), "goal": sample["tutorial_goal"],
         "model_stage_budget": budget, "required_model_stages": 2, "platform_data": data,
         "ready": budget >= 2, "blocked_reason": "" if budget >= 2 else "完整分析与验证至少需要两个模型阶段预算",
-        "execution_policy": "sequential_with_conditional_skip", "tasks": tasks,
+        "execution_policy": "dependency_ready_priority_role_capacity", "tasks": tasks,
         "human_review_required": True,
         "limitations": ["规则决定分支；可选返修由主流程显式启用，非模型自主规划", "缺少真实数据时跳过计算，不补造指标"]}
 
