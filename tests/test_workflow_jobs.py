@@ -33,6 +33,15 @@ class WebJobTests(unittest.TestCase):
     def plan(self, **changes):
         return self.store.plan(dict(sample_id="test-video", max_model_calls=2, max_repair_rounds=0, **changes))
 
+    def test_intelligent_plan_reserves_one_call_and_freezes_switch(self):
+        with self.assertRaisesRegex(ValueError, '预算'):
+            self.plan(intelligent_planning=True)
+        job = self.store.plan(dict(sample_id='test-video', max_model_calls=3, max_repair_rounds=0,
+                                   intelligent_planning=True))
+        self.assertTrue(job['plan']['intelligent_planning'])
+        self.assertEqual(job['plan']['required_model_stages'], 3)
+        self.assertTrue(read(self.store.root(job['id']) / 'request.json')['intelligent_planning'])
+
     def launch_fake(self, identifier):
         with patch.object(self.store, "launch", return_value=Mock(pid=os.getpid())) as launch:
             result = self.store.start(identifier)

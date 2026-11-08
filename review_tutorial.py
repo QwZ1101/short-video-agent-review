@@ -308,6 +308,7 @@ def main():
     parser.add_argument("--output-dir", default="reports/review", help="本次分析输出的父目录")
     parser.add_argument("--frame-limit", type=int, default=16)
     parser.add_argument("--model", default=os.environ.get("DASHSCOPE_MODEL") or "qwen3.8-flash")
+    parser.add_argument("--focus", choices=("opening", "action", "clarity", "balanced"))
     parser.add_argument("--dry-run", action="store_true", help="只整理证据，不调用 API")
     args = parser.parse_args()
     run_dir, metadata, started = None, {}, None
@@ -319,6 +320,9 @@ def main():
             path = latest["data_path"]
         bundle, images = build_evidence(sample, resolve_path(path, PROJECT_ROOT), args.frame_limit)
         payload = build_request(bundle, images, args.model)
+        if args.focus:
+            from intelligent_planner import FOCUS
+            payload['messages'][0]['content'] += '\n本轮规划分析重点（仍受原始证据与输出格式约束）：' + FOCUS[args.focus]
         run_dir = resolve_path(args.output_dir, PROJECT_ROOT) / ("run-" + datetime.now().strftime("%Y%m%d-%H%M%S-%f"))
         run_dir.mkdir(parents=True)
         write_json(run_dir / "evidence-catalog.json", bundle)

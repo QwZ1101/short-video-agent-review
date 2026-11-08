@@ -14,7 +14,7 @@ class DefinitionTests(unittest.TestCase):
     def test_plan_carries_real_definition_and_prompt_fingerprints(self):
         plan = build_plan({'sample_id': 'synthetic', 'tutorial_goal': '点赞'}, 4)
         self.assertEqual(plan['template_identity'], template_identity(load_template()))
-        self.assertEqual(len(plan['template_identity']['prompt_sha256']), 3)
+        self.assertEqual(len(plan['template_identity']['prompt_sha256']), 4)
         self.assertEqual(plan['tasks'][3]['role'], 'content_reviewer')
 
     def test_reject_unsafe_tools_broken_dependencies_and_missing_roles(self):

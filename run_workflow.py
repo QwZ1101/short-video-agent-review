@@ -154,11 +154,15 @@ def run_replay(root, state, source):
     return paths
 
 
-def run_live(root, state, sample_path, model, max_repair_rounds=0, model_retry_limit=0):
+def run_live(root, state, sample_path, model, max_repair_rounds=0, model_retry_limit=0, intelligent_planning=False):
     if type(model_retry_limit) is not int or model_retry_limit not in (0, 1):
         raise ValueError('每个模型阶段最多重试一次')
     if type(max_repair_rounds) is not int or not 0 <= max_repair_rounds <= 2:
         raise ValueError("返修最多允许 0 到 2 轮")
+    if type(intelligent_planning) is not bool:
+        raise ValueError('智能编排开关必须为布尔值')
+    if intelligent_planning and state['model_stage_budget'] < 3:
+        raise ValueError('智能编排至少需要规划、分析、验证共三次预算')
     sample = load_sample(sample_path)
     state["sample_id"] = sample["sample_id"]
     state["platform_metrics_provided"] = sample.get("platform_metrics") is not None
@@ -178,6 +182,17 @@ def run_live(root, state, sample_path, model, max_repair_rounds=0, model_retry_l
     if not plan["ready"]:
         raise ValueError(plan["blocked_reason"])
 
+    if intelligent_planning:
+        from intelligent_planner import plan_with_model
+        state['stages'].insert(0, {'id': 'planning', 'name': '智能编排', 'status': 'pending'})
+        planned = execute_stage(root, state, 'planning',
+            lambda: {'plan': plan_with_model(root, sample, plan, model)}, model_stage=True)['plan']
+        plan = planned
+        state['plan'] = plan
+        state['intelligent_planning'] = plan['intelligent_strategy']
+        write_json(root / 'plan.json', plan)
+        save_state(root, state, 'intelligent_plan_accepted', **plan['intelligent_strategy'])
+
     def materials():
         destination = root / "materials"
         run_script(root, "materials", "check_materials.py", ["--sample", str(snapshot), "--output-dir", str(destination)])
@@ -185,7 +200,10 @@ def run_live(root, state, sample_path, model, max_repair_rounds=0, model_retry_l
 
     def video():
         destination = root / "video"
-        run_script(root, "video", "prepare_video.py", ["--sample", str(snapshot), "--output-dir", str(destination)], timeout=600)
+        arguments = ["--sample", str(snapshot), "--output-dir", str(destination)]
+        if intelligent_planning:
+            arguments += ['--interval', str(plan['intelligent_strategy']['sampling_interval'])]
+        run_script(root, "video", "prepare_video.py", arguments, timeout=600)
         paths["video_evidence"] = read_json(destination / "latest.json")["data_path"]
         return {"video_evidence": paths["video_evidence"]}
 
@@ -208,8 +226,11 @@ def run_live(root, state, sample_path, model, max_repair_rounds=0, model_retry_l
 
     def analysis():
         destination = root / "analysis"
-        run_script(root, "analysis", "review_tutorial.py", ["--sample", str(snapshot), "--video-evidence", paths["video_evidence"],
-                   "--output-dir", str(destination), "--model", model])
+        arguments = ["--sample", str(snapshot), "--video-evidence", paths["video_evidence"],
+                     "--output-dir", str(destination), "--model", model]
+        if intelligent_planning:
+            arguments += ['--focus', plan['intelligent_strategy']['focus']]
+        run_script(root, "analysis", "review_tutorial.py", arguments)
         paths["analysis_dir"] = read_json(destination / "latest.json")["run_dir"]
         return {"analysis_dir": paths["analysis_dir"]}
     def model_action(identifier, action):
@@ -252,7 +273,7 @@ def run_live(root, state, sample_path, model, max_repair_rounds=0, model_retry_l
         'verification': lambda: execute_stage(root, state, 'verification', lambda: model_action('verification', verification), model_stage=True),
     }
     schedule(plan['tasks'], actions,
-             max_workers=plan['workflow_definition'].get('scheduler', {}).get('max_workers', 1),
+             max_workers=plan.get('intelligent_strategy', {}).get('max_workers', plan['workflow_definition'].get('scheduler', {}).get('max_workers', 1)),
              on_event=lambda **details: save_state(root, state, 'scheduler_decision', **details))
     if max_repair_rounds:
         from refinement import run_refinement_loop
@@ -361,14 +382,15 @@ def main():
     parser.add_argument("--review-dir", help="verify 模式必填：复用的成功分析目录")
     parser.add_argument("--sample", default="data/samples/tutorial-001.json")
     parser.add_argument("--verification-dir", help="回放的验证结果目录；默认最近一次独立验证结果")
-    parser.add_argument("--max-model-calls", type=int, choices=range(7), default=2)
+    parser.add_argument("--max-model-calls", type=int, choices=range(10), default=2)
     parser.add_argument("--max-repair-rounds", type=int, choices=(0, 1, 2), default=0,
                         help="仅 live：最多返修轮数，每轮修正+再次验证消耗两个总预算名额；默认不启用")
+    parser.add_argument("--intelligent-planning", action="store_true", help="启用一次模型规划，计入总调用预算")
     parser.add_argument("--model", default=os.environ.get("DASHSCOPE_MODEL") or "qwen3.8-flash")
     args = parser.parse_args()
     if args.mode == "verify" and not args.review_dir:
         parser.error("verify 模式需要 --review-dir")
-    if args.max_repair_rounds and args.mode != "live":
+    if (args.max_repair_rounds or args.intelligent_planning) and args.mode != "live":
         parser.error("只有 live 支持 --max-repair-rounds；已有结果使用 refine_workflow.py")
     root = PROJECT_ROOT / "reports/workflows" / ("run-" + datetime.now().strftime("%Y%m%d-%H%M%S-%f"))
     root.mkdir(parents=True)
@@ -377,7 +399,7 @@ def main():
     save_state(root, state, "workflow_started", mode=args.mode)
     try:
         if args.mode == "live":
-            paths = run_live(root, state, resolve_path(args.sample, PROJECT_ROOT), args.model, args.max_repair_rounds)
+            paths = run_live(root, state, resolve_path(args.sample, PROJECT_ROOT), args.model, args.max_repair_rounds, intelligent_planning=args.intelligent_planning)
         elif args.mode == "verify":
             paths = run_verify_only(root, state, resolve_path(args.review_dir, PROJECT_ROOT).resolve(), args.model)
         else:

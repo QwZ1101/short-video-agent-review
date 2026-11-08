@@ -3,7 +3,7 @@
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>运行任务 · 复盘工作台</title><link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/start.css"><script defer src="/start.js"></script></head>
 <body><main class="start-main">
 <header><a href="/">← 人工复核</a><a href="/cycles">下一条改进 ↗</a><a href="/metrics">截图数据 ↗</a><a href="/logs">运行日志 ↗</a><span>本机工作台</span></header>
-<section class="intro"><div><div class="eyebrow">CREATE / PLAN / RUN</div><h1>从一条视频，开始复盘。</h1><p>登记材料，查看计划，再决定本轮运行的预算。</p></div><span class="badge">默认最多 4 次模型调用（含故障恢复）</span></section>
+<section class="intro"><div><div class="eyebrow">CREATE / PLAN / RUN</div><h1>从一条视频，开始复盘。</h1><p>登记材料，查看计划，再决定本轮运行的预算。</p></div><span class="badge">默认最多 5 次模型调用（含智能编排及故障恢复）</span></section>
 <div id="message" role="status" aria-live="polite"></div>
 <section class="start-card">
 <h2>01 · 作品材料</h2><p id="start-chain-goal" class="helper" hidden></p><label class="field"><span>选择已登记作品</span><select id="samples"><option value="">正在读取…</option></select></label><p id="sample-goal" class="helper"></p>
@@ -27,9 +27,10 @@
 <button id="refresh-metrics" class="secondary" type="button">刷新截图记录</button>
 </details>
 </div><button id="save-materials" class="secondary" type="button">仅保存材料，稍后复盘</button><p id="materials-saved" class="helper" role="status"></p></section>
-<section class="start-card"><h2>开始复盘</h2><p>自动保存材料、检查计划并启动。本轮默认最多 4 次模型调用，包含有上限的故障恢复。</p><button id="quick-start" class="primary" type="button">保存材料并开始复盘</button><a id="work-next-link" class="primary" hidden>查看复盘并继续 →</a><p id="quick-status" role="status" aria-live="polite"></p><details class="advanced-run"><summary>高级设置 / 只检查材料</summary><div class="start-grid"><section class="start-card">
+<section class="start-card"><h2>开始复盘</h2><p>自动保存材料、检查计划并启动。本轮默认最多 5 次模型调用，包含智能编排与有上限的故障恢复。</p><button id="quick-start" class="primary" type="button">保存材料并开始复盘</button><a id="work-next-link" class="primary" hidden>查看复盘并继续 →</a><p id="quick-status" role="status" aria-live="polite"></p><details class="advanced-run"><summary>高级设置 / 只检查材料</summary><div class="start-grid"><section class="start-card">
 <h2>02 · 查看复盘计划</h2><label class="field"><span>本轮模型调用上限</span><select id="budget"><option value="0">基础 2 次 · 分析＋验证</option><option value="1">基础 4 次 · 最多追加 1 轮返修</option><option value="2">基础 6 次 · 最多追加 2 轮返修</option></select></label>
 <p class="helper">返修仅在证据充分且需要修改时执行。证据不足即停止，最终仍由人工复核。</p><button id="plan" class="secondary" type="button">检查材料并预览计划</button>
+<label class="data-match"><input id="intelligent-planning" type="checkbox" checked> 智能编排：自动选择取证密度与分析重点，预算增加 1 次</label>
 <label class="data-match"><input id="model-retry" type="checkbox" checked> 故障恢复：分析、验证各最多重试 1 次，总预算增加 2 次</label>
 <p class="helper">只对连接中断或不完整模型输出重试；验证重试复用成功分析。次数用尽后停止，每次尝试均保留日志。</p>
 <p id="plan-status" role="status" aria-live="polite"></p>

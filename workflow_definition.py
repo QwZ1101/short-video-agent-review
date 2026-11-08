@@ -9,7 +9,7 @@ DEFAULT = ROOT / 'workflows/tutorial-review.json'
 TOOLS = {'materials': 'check_materials.py', 'video': 'prepare_video.py',
          'metrics': 'platform_metrics.calculate_metrics', 'analysis': 'review_tutorial.py',
          'verification': 'verify_tutorial.py'}
-PROMPTS = {'content_reviewer': 'prompts/tutorial_review.md',
+PROMPTS = {'workflow_planner': 'prompts/workflow_plan.md','content_reviewer': 'prompts/tutorial_review.md',
            'evidence_verifier': 'prompts/tutorial_verify.md',
            'review_reviser': 'prompts/tutorial_revise.md'}
 

@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "id": "tutorial-review",
-  "version": 2,
+  "version": 3,
   "agents": {
     "material_checker": {
       "kind": "tool",
@@ -41,6 +41,13 @@
         "revise_review.py"
       ],
       "prompt": "prompts/tutorial_revise.md"
+    },
+    "workflow_planner": {
+      "kind": "model",
+      "tools": [
+        "workflow_scheduler.schedule"
+      ],
+      "prompt": "prompts/workflow_plan.md"
     }
   },
   "tasks": [

@@ -200,15 +200,18 @@ class JobStore:
 
     def plan(self, payload):
         required = {"sample_id", "max_model_calls", "max_repair_rounds"}
-        if not required <= set(payload) or set(payload) - required - {'metrics_record_id', 'metrics_match_confirmed', 'model_retry_limit', 'cycle_id'}:
+        if not required <= set(payload) or set(payload) - required - {'metrics_record_id', 'metrics_match_confirmed', 'model_retry_limit', 'cycle_id', 'intelligent_planning'}:
             raise ValueError("计划请求字段不正确")
         self.check_cycle(payload, payload["sample_id"])
         budget, rounds = payload["max_model_calls"], payload["max_repair_rounds"]
+        intelligent = payload.get('intelligent_planning', False)
+        if type(intelligent) is not bool:
+            raise ValueError('智能编排开关必须为布尔值')
         retry_limit = payload.get('model_retry_limit',0)
         if type(retry_limit) is not int or retry_limit not in (0,1):
             raise ValueError('每个模型阶段最多重试一次')
-        if type(rounds) is not int or rounds not in (0, 1, 2) or type(budget) is not int or budget != 2 + 2 * rounds + 2 * retry_limit:
-            raise ValueError("预算应为基础 2 次 + 每轮返修 2 次 + 启用故障恢复时额外 2 次")
+        if type(rounds) is not int or rounds not in (0, 1, 2) or type(budget) is not int or budget != 2 + 2 * rounds + 2 * retry_limit + int(intelligent):
+            raise ValueError("预算应为基础 2 次 + 每轮返修 2 次 + 启用故障恢复时额外 2 次 + 智能编排 1 次")
         sample, fingerprint = self.inputs(payload["sample_id"])
         if 'metrics_record_id' not in payload:
             binding = self.materials(payload['sample_id'])
@@ -216,6 +219,8 @@ class JobStore:
         self.attach_metrics(sample, fingerprint, payload)
         blockers, warnings = self.preflight(sample)
         plan = build_plan(sample, budget)
+        plan["intelligent_planning"] = intelligent
+        plan["required_model_stages"] += int(intelligent)
         if plan['platform_data']['status'] == 'completed':
             warnings = [w for w in warnings if w != '后台数据已填写，但本步骤尚未验证其字段、口径和数值']
         root = self.root("job-" + uuid.uuid4().hex)
@@ -306,6 +311,9 @@ class JobStore:
             result["workflow"] = {"status": live["status"], "model_stage_attempts": live["model_stage_attempts"],
                 "retry_count": live.get('retry_count',sum(max(0,len(s.get('attempts',[]))-1) for s in live['stages'])),
                 "stop_reason": redact(live.get("stop_reason")), "stages": [{"name": item["name"], "status": item["status"]} for item in live["stages"]]}
+            if live.get('intelligent_planning'):
+                strategy = live['intelligent_planning']
+                result['workflow']['intelligent_planning'] = dict(strategy, reason=redact(strategy['reason'], 500))
             for stage in live["stages"]:
                 if stage["status"] != "failed" or stage.get("id") not in ("analysis", "verification", "repair-1", "repair-2", "reverify-1", "reverify-2"):
                     continue
@@ -359,7 +367,7 @@ def execute(store, identifier):
         run.mkdir(parents=True)
         created_run = True
         save_state(run, state, "web_job_started", job_id=identifier)
-        paths = run_live(run, state, root / "sample.json", request["model"], request["max_repair_rounds"], model_retry_limit=request.get('model_retry_limit',0))
+        paths = run_live(run, state, root / "sample.json", request["model"], request["max_repair_rounds"], model_retry_limit=request.get('model_retry_limit',0), intelligent_planning=request.get('intelligent_planning',False))
         create_handoff(run, state, paths)
         atomic_json(run.parent / "latest.json", {"run_dir": str(run), "report_path": str(run / "workflow.md"), "mode": "live", "status": state["status"]})
         job.update(status="awaiting_human_review", finished_at=now())
