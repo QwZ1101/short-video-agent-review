@@ -85,9 +85,34 @@ class ScreenshotStore:
     def read(self, identifier):
         root = self.root(identifier)
         state = json.loads((root / 'record.json').read_text(encoding='utf-8'))
+        correction = root / 'invalidation.json'
+        if correction.exists():
+            invalidation = json.loads(correction.read_text(encoding='utf-8'))
+            if invalidation.get('record_sha256') != hashlib.sha256((root / 'record.json').read_bytes()).hexdigest():
+                raise ValueError('截图纠错记录与原记录不一致')
+            state.update(status='invalidated', invalidation=invalidation, error=invalidation['reason'])
         if state['status'] == 'recognizing' and not process_alive(state.get('pid')):
             state.update(status='interrupted', error='识别服务已停止，可手工核对填写；不会自动重复调用。')
         return state
+
+    def invalidate(self, identifier, sample_id, reason):
+        """Append a rejection of a mistaken confirmation without rewriting its evidence."""
+        with LOCK:
+            root = self.root(identifier)
+            state = self.read(identifier)
+            if state['status'] == 'invalidated':
+                return state
+            if state['status'] != 'confirmed' or state['confirmation']['sample_id'] != sample_id:
+                raise ValueError('只能纠正该作品已确认的截图归属')
+            if not isinstance(reason, str) or not reason.strip() or len(reason) > 1000:
+                raise ValueError('请提供截图归属纠错理由')
+            correction = {'record_id': identifier, 'sample_id': sample_id, 'reason': reason,
+                          'confirmed_at': now(), 'actor': 'user',
+                          'record_sha256': hashlib.sha256((root / 'record.json').read_bytes()).hexdigest()}
+            with (root / 'invalidation.json').open('x', encoding='utf-8') as output:
+                output.write(json.dumps(correction, ensure_ascii=False, indent=2) + '\n')
+            self.event(root, 'confirmation_invalidated', sample_id=sample_id)
+            return self.read(identifier)
 
     def image(self, identifier):
         state = self.read(identifier)
@@ -126,6 +151,8 @@ class ScreenshotStore:
         if match_confirmed is not True:
             raise ValueError('请确认截图属于本轮所选视频')
         state = self.read(identifier)
+        if state['status'] == 'invalidated':
+            raise ValueError('截图归属已被人工纠正，不能用于复盘或比较；请导入正确截图')
         c = state.get('confirmation')
         if state['status'] != 'confirmed' or not c or c.get('reviewed') is not True:
             raise ValueError('截图数据尚未人工核对，请先确认保存')
@@ -194,6 +221,8 @@ class ScreenshotStore:
     def confirm(self, identifier, payload):
         with LOCK:
             state = self.read(identifier)
+            if state['status'] == 'invalidated':
+                raise ValueError('这条截图的归属确认有误，已留档；请重新导入并关联正确作品')
             if state['status'] == 'confirmed':
                 raise ValueError('本条已确认并留档；要记录新时点请重新导入截图')
             if state['status'] == 'recognizing':

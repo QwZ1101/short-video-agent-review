@@ -11,11 +11,11 @@ if(quickUpload){
   $('upload-hint').textContent='选中即保存到本机，可随后识别或手动核对。';
   $('history-panel').open=false;
 }
-const states={uploaded:'已上传，尚未识别',recognizing:'正在识别，请稍候…',needs_confirmation:'识别完成，等待你核对',confirmed:'已确认保存',failed:'识别失败，可手工填写',interrupted:'识别中断，可手工填写'};
+const states={uploaded:'已上传，尚未识别',recognizing:'正在识别，请稍候…',needs_confirmation:'识别完成，等待你核对',confirmed:'已确认保存',invalidated:'归属确认有误，已停用并留档',failed:'识别失败，可手工填写',interrupted:'识别中断，可手工填写'};
 function message(text){$('notice').textContent=text;$('form-notice').textContent=text;}
 async function api(path,body){const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),20000);try{let headers={};if(body){headers={'Content-Type':'application/json','X-Review-Token':(await api('/api/session')).token};}const res=await fetch(path,{method:body?'POST':'GET',headers,body:body?JSON.stringify(body):undefined,signal:controller.signal});const result=await res.json();if(!res.ok)throw new Error(result.error||'请求失败');return result;}catch(e){if(e.name==='AbortError'||e instanceof TypeError)throw new Error('本机服务连接失败或超时，请保留本页，恢复服务后查看记录；不会自动重试识别。');throw e;}finally{clearTimeout(timer);}}
 function controls(){
-  const locked=current?.status==='confirmed'||current?.status==='recognizing';
+  const locked=['confirmed','recognizing','invalidated'].includes(current?.status);
   $('file').disabled=busy||!ready;
   $('upload').disabled=busy||!ready;
   $('recognize').disabled=busy||!current||current.status!=='uploaded';

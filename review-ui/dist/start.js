@@ -14,6 +14,8 @@ async function reuseExistingReview(sample){
     if(sample!==$('samples').value)return;
     if(detail.goal_changed||detail.task.tutorial_goal!==samples.find(s=>s.sample_id===sample)?.goal)continue;
     const metric=$('metrics-record').value;
+    const historicalMetric=detail.task.platform_metrics?.source?.record_id;
+    if(historicalMetric&&typeof metricRecords!=='undefined'&&metricRecords.some(r=>r.id===historicalMetric&&r.status==='invalidated'))continue;
     if(metric&&detail.task.platform_metrics?.source?.record_id!==metric)continue;
     $('work-next-link').href='/?run='+encodeURIComponent(run.id);$('work-next-link').hidden=false;$('quick-start').hidden=true;
     $('quick-status').textContent='已找到这条作品的有效复盘，直接继续人工复核或挑选建议。';return;

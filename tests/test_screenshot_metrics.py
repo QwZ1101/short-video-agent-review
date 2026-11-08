@@ -59,6 +59,20 @@ class ScreenshotTests(unittest.TestCase):
         self.assertEqual(state['confirmation']['metrics']['plays'], '1.2万')
         with self.assertRaises(ValueError): self.store.confirm(self.id, self.form)
 
+    def test_wrong_identity_is_retained_but_cannot_reenter_workflow(self):
+        self.store.confirm(self.id, self.form)
+        original = (self.store.root(self.id) / 'record.json').read_bytes()
+        image = self.store.image(self.id)[0].read_bytes()
+        state = self.store.invalidate(self.id, '', '人工确认该截图不属于所选视频')
+        self.assertEqual(state['status'], 'invalidated')
+        self.assertEqual((self.store.root(self.id) / 'record.json').read_bytes(), original)
+        self.assertEqual(self.store.image(self.id)[0].read_bytes(), image)
+        self.assertEqual(self.store.listing()['records'][0]['status'], 'invalidated')
+        with self.assertRaisesRegex(ValueError, '归属已被人工纠正'):
+            self.store.for_workflow(self.id, 'some-video', True)
+        with self.assertRaisesRegex(ValueError, '归属确认有误'):
+            self.store.confirm(self.id, self.form)
+
     def test_confirmation_requires_time_title_scope_and_real_sample(self):
         for key, value in [('reviewed', False), ('title', ''), ('observed_at', '16:42'), ('sample_id', 'no-such-video'), ('scope', 'period')]:
             form = dict(self.form, **{key: value})

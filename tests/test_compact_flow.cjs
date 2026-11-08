@@ -28,9 +28,9 @@ test('failed material/plan check never proceeds to a paid model run',async()=>{
 });
 test('existing review reuse checks the goal and the selected screenshot',async()=>{
   const source=read('start.js'),code=source.slice(source.indexOf('async function reuseExistingReview('),source.indexOf('function invalidate('));
-  for(const [changed,metric,expectReuse] of [[false,'metric-a',true],[true,'metric-a',false],[false,'metric-new',false]]){
+  for(const [changed,metric,expectReuse,invalid] of [[false,'metric-a',true,false],[true,'metric-a',false,false],[false,'metric-new',false,false],[false,'',false,true]]){
     const nodes={samples:{value:'work-a'},'metrics-record':{value:metric},'work-next-link':{hidden:true},'quick-start':{hidden:false},'quick-status':{}};
-    const context=vm.createContext({$:id=>nodes[id],samples:[{sample_id:'work-a',goal:'like'}],encodeURIComponent,
+    const context=vm.createContext({$:id=>nodes[id],samples:[{sample_id:'work-a',goal:'like'}],metricRecords:invalid?[{id:'metric-a',status:'invalidated'}]:[],encodeURIComponent,
       api:async p=>p==='/api/runs'?{runs:[{id:'run-a',sample_id:'work-a'}]}:{goal_changed:changed,task:{tutorial_goal:'like',platform_metrics:{source:{record_id:'metric-a'}}}}});
     vm.runInContext(code,context);await vm.runInContext("reuseExistingReview('work-a')",context);
     assert.equal(nodes['quick-start'].hidden,expectReuse);assert.equal(nodes['work-next-link'].hidden,!expectReuse);

@@ -41,6 +41,11 @@ def audit(workspace, output):
             current = read(workspace / 'data/samples' / (sample_id + '.json'))
             if snapshot['tutorial_goal'] != current['tutorial_goal']:
                 raise ValueError('目标已改变，旧目标结果不进入当前案例包')
+            metric_id = (snapshot.get('platform_metrics') or {}).get('source', {}).get('record_id')
+            if metric_id:
+                from screenshot_metrics import ScreenshotStore
+                if ScreenshotStore(workspace).read(metric_id)['status'] == 'invalidated':
+                    raise ValueError('截图归属已被人工纠正，该历史输入错配，不能作为正常质量案例')
             paths = state['artifacts']
             packet = output / sample_id
             prepare(Path(paths['analysis_dir']), Path(paths['verification_dir']), packet, snapshot)
