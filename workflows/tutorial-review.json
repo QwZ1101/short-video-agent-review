@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "id": "tutorial-review",
-  "version": 3,
+  "version": 4,
   "agents": {
     "material_checker": {
       "kind": "tool",
