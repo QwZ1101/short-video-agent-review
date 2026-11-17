@@ -224,7 +224,8 @@ def create_server(port=0, preferred_port=0):
         return ReviewServer(port or preferred_port)
     except OSError as error:
         # Never stop a different process that has taken the previous port.
-        if not port and preferred_port and (error.errno == errno.EADDRINUSE or getattr(error, "winerror", None) == 10048):
+        if not port and preferred_port and (
+                error.errno == errno.EADDRINUSE or getattr(error, "winerror", None) in (10013, 10048)):
             return ReviewServer(0)
         raise
 

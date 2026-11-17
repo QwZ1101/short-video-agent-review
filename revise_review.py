@@ -12,6 +12,7 @@ import time
 
 from check_materials import PROJECT_ROOT, resolve_path
 from review_tutorial import ModelNetworkError, build_request, call_dashscope, validate_review, write_json
+from model_output import parse_model_json
 from verify_tutorial import load_review_run
 from run_workflow import check_saved_verification
 
@@ -76,7 +77,7 @@ def main():
             response_id=response.get("id"), finish_reason=choice.get("finish_reason"), transport=response.get("transport"))
         if choice.get("finish_reason") != "stop":
             raise ValueError("返修回答未正常结束，不接受部分结果")
-        revised = json.loads(content)
+        revised = parse_model_json(content, metadata)
         validate_revision(revised, original, bundle, tasks)
         write_json(root / "review.json", revised)
         metadata.update(status="completed_structure_valid", changed=revised != original)

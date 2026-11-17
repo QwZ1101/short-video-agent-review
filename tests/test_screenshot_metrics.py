@@ -82,7 +82,7 @@ class ScreenshotTests(unittest.TestCase):
         release = threading.Event()
         def model(_):
             release.wait(2)
-            return {'choices': [{'message': {'content': json.dumps(self.candidate)}}]}
+            return {'choices': [{'finish_reason': 'stop', 'message': {'content': json.dumps(self.candidate)}}]}
         with patch.dict('os.environ', DASHSCOPE_API_KEY='test', DASHSCOPE_BASE_URL='https://test.aliyuncs.com'), patch('screenshot_metrics.call_dashscope', side_effect=model) as call:
             self.store.start(self.id)
             self.store.start(self.id)

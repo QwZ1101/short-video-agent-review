@@ -14,6 +14,7 @@ from datetime import datetime
 from check_materials import PROJECT_ROOT
 from local_storage import atomic_json
 from review_tutorial import build_request, call_dashscope
+from model_output import parse_model_json
 from workflow_jobs import JobStore, now, process_alive
 from workflow_logs import redact
 
@@ -207,7 +208,10 @@ class ScreenshotStore:
             result = call_dashscope(request)
             output = result['choices'][0]['message']['content']
             (root / 'model-output.txt').write_text(redact(output)[:64000], encoding='utf-8')
-            state.update(candidate=validate_candidate(json.loads(output)), status='needs_confirmation', usage=result.get('usage'))
+            if result['choices'][0].get('finish_reason') != 'stop':
+                raise ValueError('截图识别回答未正常结束，未接受不完整数字；可重新识别或人工核对')
+            state.update(candidate=validate_candidate(parse_model_json(output, state)),
+                         status='needs_confirmation', usage=result.get('usage'))
         except Exception as error:
             state.update(status='failed', error=redact(str(error))[:1500])
         finally:

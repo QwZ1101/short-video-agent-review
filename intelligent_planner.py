@@ -5,6 +5,7 @@ import time
 from pathlib import Path
 
 from workflow_scheduler import validate_graph
+from model_output import parse_model_json
 
 FOCUS = {
     'opening': '优先检查开头可见吸引点和目标观众是否能迅速理解内容；采样不能证明未采样部分不存在。',
@@ -65,6 +66,7 @@ def plan_with_model(root, sample, baseline, model):
                'allowed_tasks': baseline['tasks']}
     payload = {'model': model, 'enable_thinking': False, 'stream': True,
                'stream_options': {'include_usage': True}, 'max_tokens': 2400,
+               'response_format': {'type': 'json_object'},
                'messages': [{'role': 'system', 'content': prompt},
                             {'role': 'user', 'content': json.dumps(context, ensure_ascii=False)}]}
     write_json(directory / 'input.json', context)
@@ -77,17 +79,20 @@ def plan_with_model(root, sample, baseline, model):
         choice = response['choices'][0]
         content = choice['message']['content']
         (directory / 'model-output.txt').write_text(content, encoding='utf-8')
-        metadata.update(usage=response.get('usage'), response_id=response.get('id'), finish_reason=choice.get('finish_reason'))
+        metadata.update(usage=response.get('usage'), response_id=response.get('id'),
+                        finish_reason=choice.get('finish_reason'), transport=response.get('transport'))
         if choice.get('finish_reason') != 'stop':
             raise ValueError('规划回答不完整，未执行工具')
-        result = validate_proposal(json.loads(content), baseline)
+        result = validate_proposal(parse_model_json(content, metadata), baseline)
         write_json(directory / 'validated-plan.json', result)
         metadata['status'] = 'validated'
         return result
     except Exception as error:
-        metadata.update(status='failed', error_type=type(error).__name__)
+        metadata.update(status='failed', error_type=type(error).__name__, error=str(error),
+                        error_kind='invalid_model_output')
         if isinstance(error, ModelNetworkError):
             metadata['transport'] = error.transport
+            metadata['error_kind'] = 'network_or_incomplete_stream'
         raise
     finally:
         metadata['elapsed_seconds'] = round(time.monotonic() - started, 3)

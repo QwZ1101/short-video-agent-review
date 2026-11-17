@@ -101,9 +101,13 @@ def run_script(root, stage, script, arguments, timeout=240):
     log_path = root / (stage + ".log")
     print("正在运行：" + stage, flush=True)
     with log_path.open("a", encoding="utf-8") as log:
+        options = {'creationflags': subprocess.CREATE_NO_WINDOW} if os.name == 'nt' else {}
         result = subprocess.run([sys.executable, str(PROJECT_ROOT / script)] + arguments,
-                                cwd=str(PROJECT_ROOT), stdout=log, stderr=subprocess.STDOUT, timeout=timeout)
+                                cwd=str(PROJECT_ROOT), stdin=subprocess.DEVNULL, stdout=log,
+                                stderr=subprocess.STDOUT, timeout=timeout, **options)
     if result.returncode:
+        if result.returncode & 0xffffffff == 0xc000013a:
+            raise ValueError('%s 阶段进程被中断（Windows 0xC000013A）；不是有效模型结果。详情见 %s' % (stage, log_path))
         raise ValueError("%s 阶段退出码 %s，详情见 %s" % (stage, result.returncode, log_path))
 
 

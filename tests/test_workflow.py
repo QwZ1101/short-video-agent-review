@@ -1,4 +1,6 @@
 import copy
+import os
+import subprocess
 import hashlib
 from pathlib import Path
 import tempfile
@@ -7,10 +9,21 @@ from unittest.mock import patch
 
 from check_materials import PROJECT_ROOT
 from review_tutorial import write_json
-from run_workflow import check_saved_verification, create_handoff, execute_stage, new_state, read_json, run_replay, run_verify_only, write_failure_report
+from run_workflow import check_saved_verification, create_handoff, execute_stage, new_state, read_json, run_replay, run_verify_only, write_failure_report, run_script
 
 
 class WorkflowTests(unittest.TestCase):
+    def test_stage_subprocess_is_noninteractive_and_hidden_on_windows(self):
+        with tempfile.TemporaryDirectory() as temp, patch('run_workflow.subprocess.run') as run:
+            run.return_value.returncode = 0
+            run_script(Path(temp), 'analysis', 'review_tutorial.py', [])
+            self.assertEqual(run.call_args.kwargs['stdin'], subprocess.DEVNULL)
+            if os.name == 'nt':
+                self.assertEqual(run.call_args.kwargs['creationflags'], subprocess.CREATE_NO_WINDOW)
+            run.return_value.returncode = 0xc000013a
+            with self.assertRaisesRegex(ValueError, '进程被中断'):
+                run_script(Path(temp), 'analysis', 'review_tutorial.py', [])
+
     def setUp(self):
         temporary_parent = PROJECT_ROOT / "reports"
         temporary_parent.mkdir(exist_ok=True)

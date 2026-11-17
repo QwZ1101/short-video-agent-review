@@ -20,6 +20,13 @@ class PreviewRecoveryTests(unittest.TestCase):
             self.assertEqual(create_server(preferred_port=19433), "server")
             self.assertEqual([call.args for call in server.call_args_list], [(19433,), (0,)])
 
+    def test_inaccessible_preferred_port_falls_back_to_dynamic_port(self):
+        denied = OSError(errno.EACCES, "access denied")
+        denied.winerror = 10013
+        with patch("review_server.ReviewServer", side_effect=[denied, "server"]) as server:
+            self.assertEqual(create_server(preferred_port=19433), "server")
+            self.assertEqual([call.args for call in server.call_args_list], [(19433,), (0,)])
+
     def test_explicit_port_and_other_errors_do_not_silently_fallback(self):
         for port, code in ((19433, errno.EADDRINUSE), (0, errno.EACCES)):
             with patch("review_server.ReviewServer", side_effect=OSError(code, "failure")) as server:

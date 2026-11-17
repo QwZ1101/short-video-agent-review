@@ -47,7 +47,7 @@ class PlannerTests(unittest.TestCase):
                     plan_with_model(Path(temp), self.sample, self.plan, 'fake')
             self.assertEqual(call.call_count, 1)
             self.assertEqual((Path(temp) / 'planning/model-output.txt').read_text(), '[]')
-            self.assertEqual(json.loads((Path(temp) / 'planning/run.json').read_text())['status'], 'failed')
+            self.assertEqual(json.loads((Path(temp) / 'planning/run.json').read_text(encoding='utf-8'))['status'], 'failed')
 
     def test_real_executor_consumes_validated_strategy_and_budget(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -77,3 +77,26 @@ class PlannerTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, '三次预算'):
                 run_live(Path(temp), new_state('live', 2, 'test'), Path('none'), 'fake', intelligent_planning=True)
             call.assert_not_called()
+
+    def test_fenced_real_response_shape_requests_json_and_keeps_original(self):
+        with tempfile.TemporaryDirectory() as temp:
+            content = '```json\n' + json.dumps(proposal(self.plan)) + '\n```'
+            response = {'choices': [{'finish_reason': 'stop', 'message': {'content': content}}]}
+            with patch('review_tutorial.call_dashscope', return_value=response) as call:
+                plan = plan_with_model(Path(temp), self.sample, self.plan, 'fake')
+            self.assertEqual(plan['sample_id'], 'test')
+            self.assertEqual(call.call_args.args[0]['response_format'], {'type': 'json_object'})
+            self.assertEqual((Path(temp)/'planning/model-output.txt').read_text(), content)
+            meta = json.loads((Path(temp)/'planning/run.json').read_text(encoding='utf-8'))
+            self.assertEqual(meta['output_format'], 'markdown_json_fence')
+            self.assertEqual(meta['status'], 'validated')
+
+    def test_fenced_unauthorized_tool_still_stops(self):
+        with tempfile.TemporaryDirectory() as temp:
+            item = proposal(self.plan)
+            item['tasks'][0]['tool'] = 'shell'
+            content = '```json\n' + json.dumps(item) + '\n```'
+            with patch('review_tutorial.call_dashscope', return_value={'choices': [{'finish_reason': 'stop', 'message': {'content': content}}]}):
+                with self.assertRaisesRegex(ValueError, '未授权'):
+                    plan_with_model(Path(temp), self.sample, self.plan, 'fake')
+            self.assertFalse((Path(temp)/'planning/validated-plan.json').exists())

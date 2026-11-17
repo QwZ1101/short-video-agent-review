@@ -3,6 +3,7 @@
 使用初稿留存的原始证据，不读取人工核对记录，不重新生成初稿。
 """
 from workflow_definition import role_prompt
+from model_output import parse_model_json
 
 import argparse
 from datetime import datetime
@@ -182,7 +183,7 @@ def main():
                         response_id=response.get("id"), finish_reason=choice.get("finish_reason"), transport=response.get("transport"))
         if choice.get("finish_reason") != "stop":
             raise ValueError("模型回答未正常结束，未接受验证结果")
-        result = json.loads(content)
+        result = parse_model_json(content, metadata)
         decision = validate_verification(result, original, bundle)
         metadata.update(status="completed_structure_valid", decision=decision, revised_review_status="candidate_not_reverified")
         write_json(run_dir / "verification.json", result)

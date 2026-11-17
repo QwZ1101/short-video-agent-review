@@ -3,6 +3,7 @@
 {"sample_id":"原ID","focus":"opening|action|clarity|balanced","sampling_interval":4,
  "max_workers":2,"reason":"选取策略的具体理由","tasks":[
  {"id":"阶段ID","tool":"原工具名","action":"execute或skip","depends_on":[],"priority":0,"reason":"该阶段的任务理由"}]}
+最外层直接以 { 开始、以 } 结束；不要 Markdown 代码围栏、前言或后记。sample_id 必须与输入完全相同。
 tasks 必须包含输入的所有阶段，各一次；工具不能变更，核心依赖不能移除，可以增加无环依赖。
 只有 metrics 缺少数据时可 skip，其余阶段必须 execute；有数据时 metrics 必须 execute。
 priority 为 -10 到 10 整数，max_workers 为 1 或 2，sampling_interval 只能为 2、4、6 秒。

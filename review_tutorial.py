@@ -22,6 +22,7 @@ import zipfile
 
 from check_materials import PROJECT_ROOT, load_sample, resolve_path
 from platform_metrics import calculate_metrics
+from model_output import parse_model_json
 
 
 def write_json(path, value):
@@ -345,7 +346,7 @@ def main():
         write_json(run_dir / "run.json", metadata)
         if choice.get("finish_reason") != "stop":
             raise ValueError("模型回答未正常结束，保留原始输出供检查")
-        review = json.loads(content)
+        review = parse_model_json(content, metadata)
         validate_review(review, bundle)
         write_json(run_dir / "review.json", review)
         (run_dir / "review.md").write_text(render_report(review, bundle, metadata), encoding="utf-8")
